@@ -354,7 +354,8 @@ int main(int argc, char** argv) {
     char *directory = get_current_directory();
 
     char *configuration = argv[2] + get_string_length("-configuration:");
-
+    configuration = to_upper(configuration);
+    
     char *outputdir = "bin";
     char *objdir = "bin-int";
     char *exename = "main";
@@ -390,7 +391,7 @@ int main(int argc, char** argv) {
 
     for (umm i = 0; i < data->configurations.count; i++) {
         Configuration &current_data = data->configurations[i];
-        if (strings_match(configuration, current_data.name)) {
+        if (strings_match(configuration, to_upper(current_data.name))) {
             if (current_data.outputdir) outputdir = current_data.outputdir;
             if (current_data.objdir) objdir = current_data.objdir;
             if (current_data.exename) exename = current_data.exename;
@@ -427,6 +428,8 @@ int main(int argc, char** argv) {
             else if (strings_match(current_data.name, "release")) optimizations = true;
 
             defines.add(copy_string(to_upper(current_data.name)));
+
+            break;
         }
     }
 
@@ -435,7 +438,7 @@ int main(int argc, char** argv) {
 
     u64 exe_last_write_time = get_last_write_time(output_path);
     
-    write_compiler_line("cl -c -nologo -Oi -FC ");
+    write_compiler_line("cl -c -nologo -Oi -FC -EHsc -fp:fast ");
 
     if (optimizations) {
         write_compiler_line("-02 -Ob2 ");
