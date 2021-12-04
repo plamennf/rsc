@@ -470,9 +470,9 @@ int main(int argc, char** argv) {
     write_compiler_line("cl -c -nologo -Oi -FC -EHsc -fp:fast ");
 
     if (optimizations) {
-        write_compiler_line("-02 -Ob2 ");
+        write_compiler_line("-02 -Ob2 -MT ");
     } else {
-        write_compiler_line("-Od -Ob0 ");
+        write_compiler_line("-Od -Ob0 -MTd ");
     }
 
     if (debug_symbols) {
