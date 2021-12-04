@@ -363,6 +363,8 @@ int main(int argc, char** argv) {
         fflush(stderr);
         return 1;
     }
+
+    double rsc_start_time = get_time();
     
     Rsc_Data *data = parse_rsc_file(argv[1]);
     if (!data) {
@@ -409,7 +411,7 @@ int main(int argc, char** argv) {
 
     bool optimizations = false;
     bool debug_symbols = false;
-
+    
     Array<char *> defines;
     
 #ifdef OS_WINDOWS
@@ -492,37 +494,59 @@ int main(int argc, char** argv) {
     umm total_line_count = 0;
     
     bool has_files_to_compile = false;
-    for (umm i = 0; i < data->files.count; i++) {
-        Rsc_File *file = data->files[i];
+    if (rebuild_all_files) {
+        has_files_to_compile = true;
 
-        parse_file(data, file);
-        
-        total_line_count += get_line_count(file->name);
-        counted_files.add(file->name);
-        
-        bool add_file_to_compile_list = false;
-        if (file->last_write_time < exe_last_write_time) {
+        for (umm i = 0; i < data->files.count; i++) {
+            Rsc_File *file = data->files[i];
+
+            parse_file(data, file);
+                        
+            total_line_count += get_line_count(file->name);
+            counted_files.add(file->name);
+
             for (umm j = 0; j < file->includes.count; j++) {
                 Rsc_Dir include = file->includes[j];
                 if (!find_string_in_array(counted_files, include.name)) {
                     total_line_count += get_line_count(include.name);
                 }
-                if (include.last_write_time > exe_last_write_time) {
-                    add_file_to_compile_list = true;
-                    has_files_to_compile = true;
-                    break;
-                }
             }
-        } else {
-            add_file_to_compile_list = true;
-            has_files_to_compile = true;
-        }
-        
-        if (add_file_to_compile_list) {
+
             write_compiler_line("\"%s\\%s\" ", directory, file->name);
         }
-    }
+    } else {
+        for (umm i = 0; i < data->files.count; i++) {
+            Rsc_File *file = data->files[i];
 
+            parse_file(data, file);
+        
+            total_line_count += get_line_count(file->name);
+            counted_files.add(file->name);
+
+            bool add_file_to_compile_list = false;
+            if (file->last_write_time < exe_last_write_time) {
+                for (umm j = 0; j < file->includes.count; j++) {
+                    Rsc_Dir include = file->includes[j];
+                    if (!find_string_in_array(counted_files, include.name)) {
+                        total_line_count += get_line_count(include.name);
+                    }
+                    if (include.last_write_time > exe_last_write_time) {
+                        add_file_to_compile_list = true;
+                        has_files_to_compile = true;
+                        break;
+                    }
+                }
+            } else {
+                add_file_to_compile_list = true;
+                has_files_to_compile = true;
+            }
+        
+            if (add_file_to_compile_list) {
+                write_compiler_line("\"%s\\%s\" ", directory, file->name);
+            }
+        }
+    }
+    
     write_linker_line("link /nologo ");
 
     for (umm i = 0; i < data->files.count; i++) {
@@ -582,10 +606,24 @@ int main(int argc, char** argv) {
         system(command);
         stbsp_sprintf(command, "pushd %s", outputdir);
         system(command);
+        double rsc_end_time = get_time();
+        double rsc_elapsed = rsc_end_time - rsc_start_time;
+        double msvc_start_time = get_time();
         system(compiler_line.data);
+        double msvc_end_time = get_time();
+        double msvc_elapsed = msvc_end_time - msvc_start_time;
+        double linker_start_time = get_time();
         system(linker_line.data);
+        double linker_end_time = get_time();
+        double linker_elapsed = linker_end_time - linker_start_time;
         stbsp_sprintf(command, "popd", outputdir);
         system(command);
+
+        printf("Total time: %.4f\n", rsc_elapsed + msvc_elapsed + linker_elapsed);
+        printf("RSC time: %.4f\n", rsc_elapsed);
+        printf("MSVC time: %.4f\n", msvc_elapsed);
+        printf("Linker time: %.4f\n", linker_elapsed);
+        fflush(stdout);
     }
         
     return 0;

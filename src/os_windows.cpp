@@ -43,3 +43,19 @@ bool file_exists(char *path) {
     DWORD result = GetFileAttributes(path);
     return result != INVALID_FILE_ATTRIBUTES;
 }
+
+u64 get_performance_counter() {
+    LARGE_INTEGER li;
+    QueryPerformanceCounter(&li);
+    return li.QuadPart;
+}
+
+u64 get_performance_frequency() {
+    LARGE_INTEGER li;
+    QueryPerformanceFrequency(&li);
+    return li.QuadPart;
+}
+
+double get_time() {
+    return (double)get_performance_counter() / (double)get_performance_frequency();
+}
