@@ -523,13 +523,17 @@ int main(int argc, char** argv) {
             total_line_count += get_line_count(file->name);
             counted_files.add(file->name);
 
+            for (umm j = 0; j < file->includes.count; j++) {
+                Rsc_Dir include = file->includes[j];
+                if (!find_string_in_array(counted_files, include.name)) {
+                    total_line_count += get_line_count(include.name);
+                }
+            }
+            
             bool add_file_to_compile_list = false;
             if (file->last_write_time < exe_last_write_time) {
                 for (umm j = 0; j < file->includes.count; j++) {
                     Rsc_Dir include = file->includes[j];
-                    if (!find_string_in_array(counted_files, include.name)) {
-                        total_line_count += get_line_count(include.name);
-                    }
                     if (include.last_write_time > exe_last_write_time) {
                         add_file_to_compile_list = true;
                         has_files_to_compile = true;
