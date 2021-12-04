@@ -1,21 +1,31 @@
 #include "core.h"
-#include <windows.h>
+#include "array.h"
+
+#ifdef OS_WINDOWS
+#include "os_windows.cpp"
+#endif
 
 static Array<char> compiler_line(1024);
+static Array<char> linker_line(1024);
 
 struct Rsc_Dir {
-    char name[1024] = {};
+    char *name = NULL;
+    u64 last_write_time = 0;
+};
+
+struct Rsc_File {
+    Array<Rsc_Dir> includes;
+    
+    char *name = NULL;
+    u64 last_write_time = 0;
 };
 
 struct Configuration {
-    char name[1024] = {};
+    char *name = NULL;
 
-    char outputdir[1024] = {};
-    bool outputdir_set = false;
-    char objdir[1024] = {};
-    bool objdir_set = false;
-    char exename[1024] = {};
-    bool exename_set = false;
+    char *outputdir = NULL;
+    char *objdir = NULL;
+    char *exename = NULL;
 
     Array<Rsc_Dir> includedirs;
     bool includedirs_set = false;
@@ -24,17 +34,13 @@ struct Configuration {
     Array<Rsc_Dir> libs;
     bool libs_set = false;
 
-    char subsystem[1024] = {};
-    bool subsystem_set = false;
+    char *subsystem = NULL;
 };
 
 struct Rsc_Data {
-    char outputdir[1024] = {};
-    bool outputdir_set = false;
-    char objdir[1024] = {};
-    bool objdir_set = false;
-    char exename[1024] = {};
-    bool exename_set = false;
+    char *outputdir = NULL;
+    char *objdir = NULL;
+    char *exename = NULL;
 
     Array<Rsc_Dir> includedirs;
     bool includedirs_set = false;
@@ -44,16 +50,124 @@ struct Rsc_Data {
     bool libs_set = false;
 
     Array<Configuration> configurations;
-    Array<Rsc_Dir> files;
+    Array<Rsc_File *> files;
 
-    char subsystem[1024] = {};
-    bool subsystem_set = false;
+    char *subsystem = NULL;
 };
 
-static void parse_rsc_file(char *file_path, Rsc_Data *out_data) {
+static char *std_files[] = {
+    "assert.h",
+    "ctype.h",
+    "locale.h",
+    "math.h",
+    "setjmp.h",
+    "signal.h",
+    "stdarg.h",
+    "stdio.h",
+    "stdlib.h",
+    "string.h",
+    "time.h",
+    "float.h",
+    "stdint.h",
+    "stddef.h",
+    "vector",
+    "string",
+    "unordered_map",
+    "map",
+};
+
+static bool is_std_file(char *file_path) {
+    bool result = false;
+    for (umm i = 0; i < array_count(std_files); i++) {
+        if (strings_match(file_path, std_files[i])) {
+            result = true;
+        }
+    }
+    return result;
+}
+
+static char *find_path_of_include(Rsc_Data *data, char *file_path, char *included_in) {
+    {
+        char *char_loc = find_character_from_left(included_in, '/');
+        if (!char_loc) {
+            char_loc = find_character_from_left(included_in, '\\');
+        }
+
+        if (char_loc) {
+            char *dir = copy_string(included_in);
+            defer { delete[] dir; };
+            dir[get_string_length(included_in) - get_string_length(char_loc)] = 0;
+                //dir += 1;
+
+            char full_path[1024] = {};
+            stbsp_snprintf(full_path, sizeof(full_path), "%s/%s", dir, file_path);
+            
+            if (file_exists(full_path)) {
+                return copy_string(full_path);
+            }
+        }
+    }
+
+    // TODO: Move this to when add the files to the compiler line, because this relies on the includedirs to be set.
+    {
+        for (umm i = 0; i < data->includedirs.count; i++) {
+            char *dir = data->includedirs[i].name;
+            char full_path[1024] = {};
+            stbsp_snprintf(full_path, sizeof(full_path), "%s/%s", dir, file_path);
+
+            if (file_exists(full_path)) {
+                return copy_string(full_path);
+            }
+        }
+    }
+
+    return NULL;
+}
+
+static void parse_file(Rsc_Data *data, Rsc_File *file) {
+    char *file_data = read_entire_file(file->name);
+    if (!file_data) return;
+    defer { delete[] file_data; };
+
+    char *at = file_data;
+    while (at = strstr(at, "#include")) {
+        char *line = consume_next_line(&at);
+        line += get_string_length("#include");
+        line = eat_spaces(line);
+        line = eat_trailing_spaces(line);
+
+        line += 1;
+
+        umm line_length = get_string_length(line);
+        char *include = new char[line_length];
+        memset(include, 0, line_length);
+
+        for (umm i = 0; i < line_length; i++) {
+            if (line[i] == '"' || line[i] == '>') break;
+            include[i] = line[i];
+        }
+
+        if (is_std_file(include)) {
+            delete include;
+            continue;
+        }
+
+        Rsc_Dir dir = {};
+        char *path = find_path_of_include(data, include, file->name);
+        if (!path) return;
+        dir.name = path;
+        dir.last_write_time = get_last_write_time(dir.name);
+        file->includes.add(dir);
+    }
+}
+
+static Rsc_Data *parse_rsc_file(char *file_path) {
     char *data = read_entire_file(file_path);
-    defer(delete[] data);
-    
+    if (!data) return NULL;
+    defer { delete[] data; };
+
+    Rsc_Data *out_data = new Rsc_Data();
+
     char *at = data;
     bool is_in_configuration = false;
     Configuration *current_configuration = NULL;
@@ -61,93 +175,45 @@ static void parse_rsc_file(char *file_path, Rsc_Data *out_data) {
     bool is_in_libdirs = false;
     bool is_in_libs = false;
     bool is_in_files = false;
-    while (1) {
+    for (;;) {
         char *line = consume_next_line(&at);
         if (!line) break;
 
         if (strstr(line, "outputdir")) {
             char *cursor = strstr(line, "outputdir");
-            cursor += strlen("outputdir ");
+            cursor += get_string_length("outputdir");
 
+            cursor = eat_spaces(cursor);
+            cursor = eat_trailing_spaces(cursor);
+            
             if (is_in_configuration && current_configuration) {
-                int i = 0;
-                while (*cursor != '\n') {
-                    current_configuration->outputdir[i] = *cursor;
-                    cursor++;
-                    i++;
-                }
-                current_configuration->outputdir_set = true;                
+                current_configuration->outputdir = copy_string(cursor);
             } else {
-                int i = 0;
-                while (*cursor != '\n') {
-                    out_data->outputdir[i] = *cursor;
-                    cursor++;
-                    i++;
-                }
-                out_data->outputdir_set = true;
+                out_data->outputdir = copy_string(cursor);
             }
         } else if (strstr(line, "objdir")) {
             char *cursor = strstr(line, "objdir");
-            cursor += strlen("objdir ");
+            cursor += get_string_length("objdir");
 
+            cursor = eat_spaces(cursor);
+            cursor = eat_trailing_spaces(cursor);
+            
             if (is_in_configuration && current_configuration) {
-                int i = 0;
-                while (*cursor != '\n') {
-                    current_configuration->objdir[i] = *cursor;
-                    cursor++;
-                    i++;
-                }
-                current_configuration->objdir_set = true;
+                current_configuration->objdir = copy_string(cursor);
             } else {
-                int i = 0;
-                while (*cursor != '\n') {
-                    out_data->objdir[i] = *cursor;
-                    cursor++;
-                    i++;
-                }
-                out_data->objdir_set = true;
+                out_data->objdir = copy_string(cursor);
             }
         } else if (strstr(line, "exename")) {
             char *cursor = strstr(line, "exename");
-            cursor += strlen("exename ");
+            cursor += get_string_length("exename");
 
+            cursor = eat_spaces(cursor);
+            cursor = eat_trailing_spaces(cursor);
+            
             if (is_in_configuration && current_configuration) {
-                int i = 0;
-                while (*cursor != '\n') {
-                    current_configuration->exename[i] = *cursor;
-                    cursor++;
-                    i++;
-                }
-                current_configuration->exename_set = true;
+                current_configuration->exename = copy_string(cursor);
             } else {
-                int i = 0;
-                while (*cursor != '\n') {
-                    out_data->exename[i] = *cursor;
-                    cursor++;
-                    i++;
-                }
-                out_data->exename_set = true;
-            }
-        } else if (strstr(line, "subsystem")) {
-            char *cursor = strstr(line, "subsystem");
-            cursor += strlen("subsystem ");
-
-            if (is_in_configuration && current_configuration) {
-                int i = 0;
-                while (*cursor != '\n') {
-                    current_configuration->subsystem[i] = *cursor;
-                    cursor++;
-                    i++;
-                }
-                current_configuration->subsystem_set = true;
-            } else {
-                int i = 0;
-                while (*cursor != '\n') {
-                    out_data->subsystem[i] = *cursor;
-                    cursor++;
-                    i++;
-                }
-                out_data->subsystem_set =true;
+                out_data->exename = copy_string(cursor);
             }
         } else if (strstr(line, "configurations")) {
             is_in_configuration = true;
@@ -157,6 +223,10 @@ static void parse_rsc_file(char *file_path, Rsc_Data *out_data) {
             is_in_libdirs = false;
             is_in_libs = false;
             is_in_files = false;
+        } else if (strstr(line, "includedirs")) {
+            is_in_includedirs = true;
+            if (is_in_configuration) current_configuration->includedirs_set = true;
+            else out_data->includedirs_set = true;
         } else if (strstr(line, "includedirs")) {
             is_in_includedirs = true;
             if (is_in_configuration) current_configuration->includedirs_set = true;
@@ -173,221 +243,308 @@ static void parse_rsc_file(char *file_path, Rsc_Data *out_data) {
             is_in_files = true;
         } else {
             if (is_in_configuration) {
-                out_data->configurations.add({});
+                out_data->configurations.emplace();
                 current_configuration = &out_data->configurations[out_data->configurations.count - 1];
+                umm line_length = get_string_length(line);
+                current_configuration->name = new char[line_length + 1];
+                memset(current_configuration->name, 0, line_length + 1);
                 int i = 0;
                 while (*line != ':') {
-                    if (*line == ' ') { line++; continue; }
+                    if (*line == ' ') {
+                        line++;
+                        continue;
+                    }
                     current_configuration->name[i] = *line;
                     line++;
                     i++;
                 }
             } else if (is_in_includedirs) {
-                char dir_name[1024] = {};
-                int i = 0;
-                while (*line != '\n') {
-                    if (*line == ' ') { line++; continue; }
-                    dir_name[i] = *line;
-                    line++;
-                    i++;
-                }
                 Rsc_Dir dir = {};
-                strcpy(dir.name, dir_name);
+                line = eat_spaces(line);
+                line = eat_trailing_spaces(line);
+                dir.name = copy_string(line);
                 if (is_in_configuration && current_configuration) {
                     current_configuration->includedirs.add(dir);
                 } else {
                     out_data->includedirs.add(dir);
                 }
             } else if (is_in_libdirs) {
-                char dir_name[1024] = {};
-                int i = 0;
-                while (*line != '\n') {
-                    if (*line == ' ') { line++; continue; }
-                    dir_name[i] = *line;
-                    line++;
-                    i++;
-                }
                 Rsc_Dir dir = {};
-                strcpy(dir.name, dir_name);
+                line = eat_spaces(line);
+                line = eat_trailing_spaces(line);
+                dir.name = copy_string(line);
                 if (is_in_configuration && current_configuration) {
                     current_configuration->libdirs.add(dir);
                 } else {
                     out_data->libdirs.add(dir);
                 }
             } else if (is_in_libs) {
-                char lib_name[1024] = {};
-                int i = 0;
-                while (*line != '\n') {
-                    if (*line == ' ') { line++; continue; }
-                    lib_name[i] = *line;
-                    line++;
-                    i++;
-                }
-                Rsc_Dir lib = {};
-                strcpy(lib.name, lib_name);
+                Rsc_Dir dir = {};
+                line = eat_spaces(line);
+                line = eat_trailing_spaces(line);
+                dir.name = copy_string(line);
                 if (is_in_configuration && current_configuration) {
-                    current_configuration->libs.add(lib);
+                    current_configuration->libs.add(dir);
                 } else {
-                    out_data->libs.add(lib);
+                    out_data->libs.add(dir);
                 }
             } else if (is_in_files) {
-                char file_name[1024] = {};
-                int i = 0;
-                while (*line != '\n') {
-                    if (*line == ' ') { line++; continue; }
-                    file_name[i] = *line;
-                    line++;
-                    i++;
-                }
-                Rsc_Dir file = {};
-                strcpy(file.name, file_name);
+                Rsc_File *file = new Rsc_File;
+                line = eat_spaces(line);
+                line = eat_trailing_spaces(line);
+                file->name = copy_string(line);
+                file->last_write_time = get_last_write_time(file->name);
                 out_data->files.add(file);
             }
         }
     }
+    
+    return out_data;
 }
 
-static void write_compiler_line(const char *text, ...) {
+static void write_compiler_line(char *text, ...) {
     va_list args;
 
-    char buf[1024] = {};
-    
+    char buffer[1024] = {};
+
     va_start(args, text);
-    vsprintf(buf, text, args);
+    stbsp_vsnprintf(buffer, sizeof(buffer), text, args);
     va_end(args);
-    
-    for (size_t i = 0; i < strlen(buf); ++i) {
-        compiler_line.add(buf[i]);
+
+    for (umm i = 0; i < get_string_length(buffer); i++) {
+        compiler_line.add(buffer[i]);
     }
 }
 
-int main(int argc, char **argv) {
-    if (argc == 1 || argc != 3) {
-        printf("Usage: rsc <filename> <configuration>\n");
+static void write_linker_line(char *text, ...) {
+    va_list args;
+
+    char buffer[1024] = {};
+
+    va_start(args, text);
+    stbsp_vsnprintf(buffer, sizeof(buffer), text, args);
+    va_end(args);
+
+    for (umm i = 0; i < get_string_length(buffer); i++) {
+        linker_line.add(buffer[i]);
+    }
+}
+
+int main(int argc, char** argv) {
+    if (argc < 3) {
+        fprintf(stderr, "Usage: %s <file.rsc> <configuration> <-B>\n", argv[0]);
+        fflush(stderr);
+        return 1;
+    }
+    
+    Rsc_Data *data = parse_rsc_file(argv[1]);
+    if (!data) {
+        fprintf(stderr, "Unable to open file '%s' for reading!\n", argv[1]);
+        fflush(stderr);
         return 1;
     }
 
-    char directory[MAX_PATH];
-    GetCurrentDirectory(MAX_PATH, directory);
+    bool rebuild_all_files = false;
+    if (argc == 4) {
+        if (strings_match(argv[3], "-B")) {
+            rebuild_all_files = true;
+        }
+    }
     
-    Rsc_Data data;
-    parse_rsc_file(argv[1], &data);
+    char *directory = get_current_directory();
 
-    char *configuration = argv[2] + strlen("-configuration:");
+    char *configuration = argv[2] + get_string_length("-configuration:");
 
-    char *outputdir = "build";
-    char *objdir = "obj";
+    char *outputdir = "bin";
+    char *objdir = "bin-int";
     char *exename = "main";
     char *subsystem = "console";
 
-    Array<Rsc_Dir> *includedirs = NULL;
-    Array<Rsc_Dir> *libdirs = NULL;
-    Array<Rsc_Dir> *libs = NULL;
-    
-    if (data.outputdir_set) outputdir = data.outputdir;
-    if (data.objdir_set) objdir = data.objdir;
-    if (data.exename_set) exename = data.exename;
-    if (data.subsystem_set) subsystem = data.subsystem;
+    Array<Rsc_Dir> includedirs;
+    Array<Rsc_Dir> libdirs;
+    Array<Rsc_Dir> libs;
 
-    if (data.includedirs_set) includedirs = &data.includedirs;
-    if (data.libdirs_set) libdirs = &data.libdirs;
-    if (data.libs_set) libs = &data.libs;
+    if (data->outputdir) outputdir = data->outputdir;
+    if (data->objdir) objdir = data->objdir;
+    if (data->exename) exename = data->exename;
+    if (data->subsystem) subsystem = data->subsystem;
+
+    if (data->includedirs_set) {
+        includedirs.add(data->includedirs);
+    }
+    if (data->libdirs_set) {
+        libdirs.add(data->libdirs);
+    }
+    if (data->libs_set) {
+        libs.add(data->libs);
+    }
 
     bool optimizations = false;
     bool debug_symbols = false;
 
     Array<char *> defines;
-
-#if _WIN32
+    
+#ifdef OS_WINDOWS
     defines.add("OS_WINDOWS");
 #endif
-    
-    for (int i = 0; i < data.configurations.count; ++i) {
-        Configuration &current_data = data.configurations[i];
-        if (strcmp(configuration, current_data.name) == 0) {
-            if (current_data.outputdir_set) outputdir = current_data.outputdir;
-            if (current_data.objdir_set) objdir = current_data.objdir;
-            if (current_data.exename_set) exename = current_data.exename;
-            if (current_data.subsystem_set) subsystem = current_data.subsystem;
 
-            if (current_data.includedirs_set) includedirs = &current_data.includedirs;
-            if (current_data.libdirs_set) libdirs = &current_data.libdirs;
-            if (current_data.libs_set) libs = &current_data.libs;
+    for (umm i = 0; i < data->configurations.count; i++) {
+        Configuration &current_data = data->configurations[i];
+        if (strings_match(configuration, current_data.name)) {
+            if (current_data.outputdir) outputdir = current_data.outputdir;
+            if (current_data.objdir) objdir = current_data.objdir;
+            if (current_data.exename) exename = current_data.exename;
+            if (current_data.subsystem) subsystem = current_data.subsystem;
+
+            if (current_data.includedirs_set) {
+                if (!includedirs.allocated) {
+                    libdirs.resize(32);
+                }
+                for (umm j = 0; j < current_data.includedirs.count; j++) {
+                    includedirs.add(current_data.includedirs[j]);
+                }
+            }
             
-            if (strcmp(current_data.name, "debug") == 0) debug_symbols = true;
-            else if (strcmp(current_data.name, "release") == 0) optimizations = true;
+            if (current_data.libdirs_set) {
+                if (!libdirs.allocated) {
+                    libdirs.resize(32);
+                }
+                for (umm j = 0; j < current_data.libdirs.count; j++) {
+                    libdirs.add(current_data.libdirs[j]);
+                }
+            }
 
-            defines.add(to_upper(current_data.name));
+            if (current_data.libs_set) {
+                if (!libs.allocated) {
+                    libs.resize(32);
+                }
+                for (umm j = 0; j < current_data.libs.count; j++) {
+                    libs.add(current_data.libs[j]);
+                }
+            }
+
+            if (strings_match(current_data.name, "debug")) debug_symbols = true;
+            else if (strings_match(current_data.name, "release")) optimizations = true;
+
+            defines.add(copy_string(to_upper(current_data.name)));
         }
     }
 
-    if (!outputdir) outputdir = "build";
-    if (!exename) exename = "main";
+    char output_path[1024] = {};
+    stbsp_snprintf(output_path, sizeof(output_path), "%s\\%s\\%s.exe", directory, outputdir, exename);
 
-    write_compiler_line("cl -nologo -Oi -FC ");
+    u64 exe_last_write_time = get_last_write_time(output_path);
+    
+    write_compiler_line("cl -c -nologo -Oi -FC ");
 
     if (optimizations) {
-        write_compiler_line("-O2 ");
+        write_compiler_line("-02 -Ob2 ");
+    } else {
+        write_compiler_line("-Od -Ob0 ");
     }
 
     if (debug_symbols) {
         write_compiler_line("-Zi ");
     }
 
-    for (int i = 0; i < defines.count; ++i) {
+    for (umm i = 0; i < defines.count; i++) {
         write_compiler_line("-D%s ", defines[i]);
     }
 
-    if (includedirs) {
-        for (int i = 0; i < includedirs->count; ++i) {
-            Rsc_Dir &includedir = includedirs->get(i);
-            write_compiler_line("-I \"%s\\%s\" ", directory, includedir.name);
-        }
+    for (umm i = 0; i < includedirs.count; i++) {
+        Rsc_Dir &includedir = includedirs[i];
+        write_compiler_line("-I \"%s\\%s\" ", directory, includedir.name);
     }
 
-    if (!objdir) objdir = "obj";
     write_compiler_line("/Fo\"%s\\%s\\\\\" ", directory, objdir);
     
-    for (int i = 0; i < data.files.count; ++i) {
-        write_compiler_line("\"%s\\%s\" ", directory, data.files[i].name);
-    }
-    
-    write_compiler_line("-link ");
+    bool has_files_to_compile = false;
+    for (umm i = 0; i < data->files.count; i++) {
+        Rsc_File *file = data->files[i];
 
-    if (subsystem) {
-        write_compiler_line("-subsystem:%s ", subsystem);
-    }
-    
-    if (libdirs) {
-        for (int i = 0; i < libdirs->count; ++i) {
-            Rsc_Dir &libdir = libdirs->get(i);
-            write_compiler_line("-LIBPATH:\"%s\" ", libdir.name);
+        parse_file(data, file);
+
+        bool add_file_to_compile_list = false;
+        if (file->last_write_time < exe_last_write_time) {
+            for (umm j = 0; j < file->includes.count; j++) {
+                Rsc_Dir include = file->includes[j];
+                if (include.last_write_time > exe_last_write_time) {
+                    add_file_to_compile_list = true;
+                    has_files_to_compile = true;
+                    break;
+                }
+            }
+        } else {
+            add_file_to_compile_list = true;
+            has_files_to_compile = true;
+        }
+        
+        if (add_file_to_compile_list) {
+            write_compiler_line("\"%s\\%s\" ", directory, file->name);
         }
     }
 
-    write_compiler_line("user32.lib gdi32.lib shell32.lib kernel32.lib winmm.lib ");
-    
-    if (libs) {
-        for (int i = 0; i < libs->count; ++i) {
-            Rsc_Dir &lib = libs->get(i);
-            write_compiler_line("%s ", lib);
+    write_linker_line("link /nologo ");
+
+    for (umm i = 0; i < data->files.count; i++) {
+        Rsc_File *file = data->files[i];
+
+        char *name = file->name; // Already used the file->name so we can change it.
+
+        char *char_loc = find_character_from_left(name, '/');
+        if (!char_loc) {
+            char_loc = find_character_from_left(name, '\\');
         }
+
+        char_loc += 1;
+
+        name = char_loc;
+        
+        char_loc = find_character_from_right(name, '.');
+
+        char *thing = name;
+        thing[get_string_length(name) - get_string_length(char_loc)] = 0;
+        
+        char path[1024] = {};
+        stbsp_snprintf(path, sizeof(path), "%s\\%s\\%s.obj", directory, objdir, thing);
+        write_linker_line("%s ", path);
+    }
+    
+    write_linker_line("-subsystem:%s ", subsystem);
+
+    for (umm i = 0; i < libdirs.count; i++) {
+        Rsc_Dir &libdir = libdirs[i];
+        write_linker_line("-LIBPATH:\"%s\" ", libdir.name);
     }
 
-    write_compiler_line("-OUT:%s\\%s\\%s.exe", directory, outputdir, exename);
-    write_compiler_line("\n");
+    write_linker_line("user32.lib gdi32.lib shell32.lib kernel32.lib winmm.lib ");
+
+    for (umm i = 0; i < libs.count; i++) {
+        Rsc_Dir &lib = libs[i];
+        write_linker_line("%s ", lib.name);
+    }
+
+    write_linker_line("-OUT:%s ", output_path);
+    write_linker_line("\n");
+    
     compiler_line.add(0);
-    
-    char command[256] = {};
-    sprintf(command, "if not exist %s mkdir %s", outputdir, outputdir);
-    system(command);
-    sprintf(command, "if not exist %s mkdir %s", objdir, objdir);
-    system(command);
-    sprintf(command, "pushd %s", outputdir);
-    system(command);
-    system(compiler_line.data);
-    sprintf(command, "popd", outputdir);
-    system(command);
+    linker_line.add(0);
 
+    if (has_files_to_compile) {
+        char command[1024] = {};
+        stbsp_sprintf(command, "@echo off");
+        system(command);
+        stbsp_sprintf(command, "if not exist %s mkdir %s", outputdir, outputdir);
+        system(command);
+        stbsp_sprintf(command, "if not exist %s mkdir %s", objdir, objdir);
+        system(command);
+        stbsp_sprintf(command, "pushd %s", outputdir);
+        system(command);
+        system(compiler_line.data);
+        system(linker_line.data);
+        stbsp_sprintf(command, "popd", outputdir);
+        system(command);
+    }
+        
     return 0;
 }

@@ -1,21 +1,19 @@
 #ifndef CORE_H
 #define CORE_H
 
-#include <stdlib.h>
-#include <stdio.h>
-#include <string.h>
-#include <stdarg.h>
-#include <ctype.h>
-
 #if _WIN32
-#define OS_WINDOWS 1
+#define OS_WINDOWS
 #endif
 
-#ifndef NULL
-#define NULL 0
-#endif
+#define STB_SPRINTF_IMPLEMENTATION
+#include "stb_sprintf.h"
 
-#define var auto
+#include <assert.h>
+#include <string.h>
+#include <stdio.h>
+
+typedef unsigned long long umm;
+typedef signed long long   smm;
 
 typedef unsigned long long u64;
 typedef unsigned int       u32;
@@ -32,133 +30,85 @@ typedef signed int         b32;
 typedef signed short       b16;
 typedef signed char        b8;
 
+typedef double             float64;
+typedef float              float32;
 typedef double             f64;
 typedef float              f32;
 
-void *operator new(size_t size) {
-    if (size == 0) ++size;
+// Copy-paste from https://gist.github.com/andrewrk/ffb272748448174e6cdb4958dae9f3d8
+#define CONCAT_INTERNAL(x,y) x##y
+#define CONCAT(x,y) CONCAT_INTERNAL(x,y)
 
-    if (void *ptr = malloc(size)) {
-        memset(ptr, 0, size);
-        return ptr;
-    }
-
-    return NULL;
-}
-
-void operator delete(void *ptr) {
-    free(ptr);
-}
-
-template <typename F>
-struct saucy_defer {
-	F f;
-	saucy_defer(F f) : f(f) {}
-	~saucy_defer() { f(); }
+template<typename T>
+struct ExitScope {
+    T lambda;
+    ExitScope(T lambda) : lambda(lambda){}
+    ~ExitScope(){lambda();}
+    ExitScope(const ExitScope&);
+private:
+    ExitScope& operator =(const ExitScope&);
 };
+ 
+class ExitScopeHelp {
+public:
+    template<typename T>
+    ExitScope<T> operator+(T t){ return t;}
+};
+ 
+#define defer const auto& CONCAT(defer__, __COUNTER__) = ExitScopeHelp() + [&]()
 
-template <typename F>
-saucy_defer<F> defer_func(F f) {
-	return saucy_defer<F>(f);
+#define array_count(array) (sizeof(array)/sizeof((array)[0]))
+
+inline umm get_string_length(char *a) {
+    umm length = 0;
+    while (*a) {
+        ++length;
+        ++a;
+    }
+    return length;
 }
 
-#define DEFER_1(x, y) x##y
-#define DEFER_2(x, y) DEFER_1(x, y)
-#define DEFER_3(x)    DEFER_2(x, __COUNTER__)
-#define defer(code)   auto DEFER_3(_defer_) =     defer_func([&](){code;})
-
-char *read_entire_file(FILE *file) {
-    char *result = NULL;
-    if (file) {
-        fseek(file, 0, SEEK_END);
-        var length = ftell(file);
-        fseek(file, 0, SEEK_SET);
-
-        result = new char[length + 1];
-        fread(result, sizeof(char), length, file);
-        fclose(file);
+inline bool strings_match(char *a, char *b) {
+    if (a == b) return true;
+    if (get_string_length(a) != get_string_length(b)) return false;
+    while (*a && *b) {
+        if (*a != *b) return false;
+        ++a;
+        ++b;
     }
+    if (a && !b) return false;
+    if (b && !a) return false;
+    return true;
+}
+
+inline char *copy_string(char *str) {
+    umm length = get_string_length(str);
+    char *result = new char[length + 1];
+    memset(result, 0, length + 1);
+    memcpy(result, str, length);
     return result;
 }
 
-char *read_entire_file(char *file_path) {
-    FILE *file = fopen(file_path, "r");
-    return read_entire_file(file);
+inline void clamp(float *value, float min, float max) {
+    if (!value) return;
+    
+    if (*value < min) *value = min;
+    else if (*value > max) *value = max;
 }
 
-#define assert(expr) if(expr){}else{__debugbreak();}
+inline void clamp(int *value, int min, int max) {
+    if (!value) return;
 
-template<typename T>
-struct Array {
-    T* data = NULL;
-    size_t count = 0;
-    size_t allocated = 0;
-    
-    Array(size_t newSize = 4) {
-        resize(newSize);
-    }
-    
-    ~Array() {
-        free(data);
-    }
-    
-    void add(const T& value) {
-        if (count >= allocated) {
-            resize(allocated + allocated / 2);
-        }
-        
-        data[count] = value;
-        count++;
-    }
-    
-    void add(T&& value) {
-        if (count >= allocated) {
-            resize(allocated + allocated / 2);
-        }
-        
-        data[count] = (T&&)value;
-        count++;
-    }
-    
-    void resize(size_t newSize) {
-        data = (T *)realloc(data, newSize * sizeof(T));
-        allocated = newSize;
-        if (allocated < count) {
-            count = allocated;
-        }
-    }
-
-    const T &get(size_t index) const {
-        assert(index < count);
-        
-        return data[index];
-    }
-
-    T &get(size_t index) {
-        assert(index < count);
-        
-        return data[index];
-    }
-    
-    const T& operator[](size_t index) const {
-        assert(index < count);
-        
-        return data[index];
-    }
-    
-    T& operator[](size_t index) {
-        assert(index < count);
-        
-        return data[index];
-    }
-};
-
-int round_float_to_int(float value) {
-    return (int)(value + 0.5f);
+    if (*value < min) *value = min;
+    else if (*value > max) *value = max;
 }
 
-float lerp(float a, float b, float f) {
-    return a + f * (b - a);
+inline char *find_character_from_right(char *s, char c) {
+    return strrchr(s, c);
+}
+
+inline char *find_character_from_left(char *s, char c) {
+    return strchr(s, c);
 }
 
 inline char *consume_next_line(char **text_ptr) {
@@ -174,7 +124,57 @@ inline char *consume_next_line(char **text_ptr) {
         end++;
 
         if (*t == '\r') {
-            if (*end == '\n') end++;
+            if (*end == '\n') ++end;
+        }
+
+        *t = '\0';
+    }
+    
+    *text_ptr = end;
+    
+    return s;
+}
+
+inline char *eat_spaces(char *at) {
+    if (!at) return NULL;
+    
+    char *result = at;
+    while (*result == ' ') {
+        result++;
+    }
+    return result;
+}
+
+inline char *eat_trailing_spaces(char *at) {
+    if (!at) return NULL;
+
+    umm orig_len = get_string_length(at);
+    umm len = 0;
+    while (at[orig_len - len] == ' ') {
+        len++;
+    }
+
+    char *result = at;
+    result[orig_len - len] = 0;
+    
+    return result;
+}
+
+inline char *break_by_spaces(char **text_ptr) {
+    char *t = *text_ptr;
+    if (!*t) return NULL;
+
+    char *s = t;
+
+    char *end = t;
+    if (*t) {
+        while (*end && *end != ' ') {
+            end++;
+            t++;
+        }
+
+        if (*end == ' ') {
+            end++;
         }
 
         *t = '\0';
@@ -193,9 +193,9 @@ inline char uppercase(char c) {
 }
 
 inline char *to_upper(char *text) {
-    size_t len = strlen(text);
+    umm len = get_string_length(text);
     char *result = text;
-    for (size_t i = 0; i < len; ++i) {
+    for (umm i = 0; i < len; ++i) {
         result[i] = uppercase(text[i]);
     }
     return result;

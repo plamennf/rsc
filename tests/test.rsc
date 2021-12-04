@@ -1,15 +1,15 @@
-outputdir build
-objdir obj
+outputdir bin
+objdir bin-int
 exename main
 	
 configurations {
     debug: {
-        outputdir build\debug
-	objdir obj\debug
+        outputdir bin\debug
+	objdir bin-int\debug
         exename main_debug
     },
     release: {
-        
+            
     },
 }
 
