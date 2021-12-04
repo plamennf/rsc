@@ -86,6 +86,33 @@ static bool is_std_file(char *file_path) {
     return result;
 }
 
+static umm get_line_count(char *file_path) {
+    umm result = 0;
+
+    char *data = read_entire_file(file_path);
+    defer { delete[] data; };
+
+    char *at = data;
+    for (;;) {
+        char *line = consume_next_line(&at);
+        if (!line) break;
+
+        result++;
+    }
+    
+    return result;
+}
+
+static bool find_string_in_array(const Array<char *> &array, char *string) {
+    bool result = false;
+    for (umm i = 0; i < array.count; i++) {
+        if (strings_match(array[i], string)) {
+            result = true;
+        }
+    }
+    return result;
+}
+
 static char *find_path_of_include(Rsc_Data *data, char *file_path, char *included_in) {
     {
         char *char_loc = find_character_from_left(included_in, '/');
@@ -460,17 +487,26 @@ int main(int argc, char** argv) {
     }
 
     write_compiler_line("/Fo\"%s\\%s\\\\\" ", directory, objdir);
+
+    Array<char *> counted_files;
+    umm total_line_count = 0;
     
     bool has_files_to_compile = false;
     for (umm i = 0; i < data->files.count; i++) {
         Rsc_File *file = data->files[i];
 
         parse_file(data, file);
-
+        
+        total_line_count += get_line_count(file->name);
+        counted_files.add(file->name);
+        
         bool add_file_to_compile_list = false;
         if (file->last_write_time < exe_last_write_time) {
             for (umm j = 0; j < file->includes.count; j++) {
                 Rsc_Dir include = file->includes[j];
+                if (!find_string_in_array(counted_files, include.name)) {
+                    total_line_count += get_line_count(include.name);
+                }
                 if (include.last_write_time > exe_last_write_time) {
                     add_file_to_compile_list = true;
                     has_files_to_compile = true;
@@ -533,6 +569,9 @@ int main(int argc, char** argv) {
     compiler_line.add(0);
     linker_line.add(0);
 
+    printf("Line count(including blank lines and comments and included headers(without crt)): %llu\n", total_line_count);
+    fflush(stdout);
+    
     if (has_files_to_compile) {
         char command[1024] = {};
         stbsp_sprintf(command, "@echo off");
