@@ -3,6 +3,6 @@
 
 #define STUFF 1
 
-void bruh(const char *msg);
+void bruh(char *msg);
 
 #endif

@@ -1,5 +1,5 @@
 #include <stdio.h>
 
-void bruh(const char *msg) {
+void bruh(char *msg) {
     printf("%s", msg);
 }

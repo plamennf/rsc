@@ -35,6 +35,10 @@ struct Configuration {
     bool libs_set = false;
 
     char *subsystem = NULL;
+    char *custom_compiler_line = NULL;
+    char *custom_linker_line = NULL;
+    char *prebuild_cmd = NULL;
+    char *postbuild_cmd = NULL;
 };
 
 struct Rsc_Data {
@@ -53,6 +57,10 @@ struct Rsc_Data {
     Array<Rsc_File *> files;
 
     char *subsystem = NULL;
+    char *custom_compiler_line = NULL;
+    char *custom_linker_line = NULL;
+    char *prebuild_cmd = NULL;
+    char *postbuild_cmd = NULL;
 };
 
 static char *std_files[] = {
@@ -268,6 +276,58 @@ static Rsc_Data *parse_rsc_file(char *file_path) {
             else out_data->libs_set = true;
         } else if (strstr(line, "files")) {
             is_in_files = true;
+        } else if (strstr(line, "customcompilerline")) {
+            line = eat_spaces(line);
+            line = eat_trailing_spaces(line);
+            line += get_string_length("customcompilerline");
+            line = eat_spaces(line);
+            line += 1;
+            line = eat_spaces(line);
+            line = eat_trailing_spaces(line);
+            if (is_in_configuration) {
+                current_configuration->custom_compiler_line = copy_string(line);
+            } else {
+                out_data->custom_compiler_line = copy_string(line);
+            }
+        } else if (strstr(line, "customlinkerline")) {
+            line = eat_spaces(line);
+            line = eat_trailing_spaces(line);
+            line += get_string_length("customlinkerline");
+            line = eat_spaces(line);
+            line += 1;
+            line = eat_spaces(line);
+            line = eat_trailing_spaces(line);
+            if (is_in_configuration) {
+                current_configuration->custom_linker_line = copy_string(line);
+            } else {
+                out_data->custom_linker_line = copy_string(line);
+            }
+        } else if (strstr(line, "prebuildcmd")) {
+            line = eat_spaces(line);
+            line = eat_trailing_spaces(line);
+            line += get_string_length("prebuildcmd");
+            line = eat_spaces(line);
+            line += 1;
+            line = eat_spaces(line);
+            line = eat_trailing_spaces(line);
+            if (is_in_configuration) {
+                current_configuration->prebuild_cmd = copy_string(line);
+            } else {
+                out_data->prebuild_cmd = copy_string(line);
+            }
+        } else if (strstr(line, "postbuildcmd")) {
+            line = eat_spaces(line);
+            line = eat_trailing_spaces(line);
+            line += get_string_length("postbuildcmd");
+            line = eat_spaces(line);
+            line += 1;
+            line = eat_spaces(line);
+            line = eat_trailing_spaces(line);
+            if (is_in_configuration) {
+                current_configuration->postbuild_cmd = copy_string(line);
+            } else {
+                out_data->postbuild_cmd = copy_string(line);
+            }
         } else {
             if (is_in_configuration) {
                 out_data->configurations.emplace();
@@ -389,6 +449,10 @@ int main(int argc, char** argv) {
     char *objdir = "bin-int";
     char *exename = "main";
     char *subsystem = "console";
+    char *custom_compiler_line = NULL;
+    char *custom_linker_line = NULL;
+    char *prebuild_cmd = NULL;
+    char *postbuild_cmd = NULL;
 
     Array<Rsc_Dir> includedirs;
     Array<Rsc_Dir> libdirs;
@@ -398,7 +462,11 @@ int main(int argc, char** argv) {
     if (data->objdir) objdir = data->objdir;
     if (data->exename) exename = data->exename;
     if (data->subsystem) subsystem = data->subsystem;
-
+    if (data->custom_compiler_line) custom_compiler_line = data->custom_compiler_line;
+    if (data->custom_linker_line) custom_linker_line = data->custom_linker_line;
+    if (data->prebuild_cmd) prebuild_cmd = data->prebuild_cmd;
+    if (data->postbuild_cmd) postbuild_cmd = data->postbuild_cmd;
+    
     if (data->includedirs_set) {
         includedirs.add(data->includedirs);
     }
@@ -425,7 +493,35 @@ int main(int argc, char** argv) {
             if (current_data.objdir) objdir = current_data.objdir;
             if (current_data.exename) exename = current_data.exename;
             if (current_data.subsystem) subsystem = current_data.subsystem;
-
+            if (current_data.custom_compiler_line) {
+                if (custom_compiler_line) {
+                    custom_compiler_line = concatenate(custom_compiler_line, current_data.custom_compiler_line);
+                } else {
+                    custom_compiler_line = current_data.custom_compiler_line;
+                }
+            }
+            if (current_data.custom_linker_line) {
+                if (custom_linker_line) {
+                    custom_linker_line = concatenate(custom_linker_line, current_data.custom_linker_line);
+                } else {
+                    custom_linker_line = current_data.custom_linker_line;
+                }
+            }
+            if (current_data.prebuild_cmd) {
+                if (prebuild_cmd) {
+                    prebuild_cmd = concatenate(prebuild_cmd, current_data.prebuild_cmd);
+                } else {
+                    prebuild_cmd = current_data.prebuild_cmd;
+                }
+            }
+            if (current_data.postbuild_cmd) {
+                if (postbuild_cmd) {
+                    postbuild_cmd = concatenate(postbuild_cmd, current_data.postbuild_cmd);
+                } else {
+                    postbuild_cmd = current_data.postbuild_cmd;
+                }
+            }
+            
             if (current_data.includedirs_set) {
                 if (!includedirs.allocated) {
                     libdirs.resize(32);
@@ -466,8 +562,12 @@ int main(int argc, char** argv) {
     stbsp_snprintf(output_path, sizeof(output_path), "%s\\%s\\%s.exe", directory, outputdir, exename);
 
     u64 exe_last_write_time = get_last_write_time(output_path);
+
+    if (prebuild_cmd) {
+        system(prebuild_cmd);
+    }
     
-    write_compiler_line("cl -c -nologo -Oi -FC -EHsc -fp:fast ");
+    write_compiler_line("cl -c -nologo -Oi -FC -EHsc -fp:fast -fp:except- ");
 
     if (optimizations) {
         write_compiler_line("-02 -Ob2 -MT ");
@@ -489,6 +589,10 @@ int main(int argc, char** argv) {
     }
 
     write_compiler_line("/Fo\"%s\\%s\\\\\" ", directory, objdir);
+
+    if (custom_compiler_line) {
+        write_compiler_line(" %s ", custom_compiler_line);
+    }
 
     Array<char *> counted_files;
     umm total_line_count = 0;
@@ -593,6 +697,10 @@ int main(int argc, char** argv) {
 
     write_linker_line("-OUT:%s ", output_path);
     write_linker_line("\n");
+
+    if (custom_linker_line) {
+        write_linker_line(" %s ", custom_linker_line);
+    }
     
     compiler_line.add(0);
     linker_line.add(0);
@@ -628,6 +736,10 @@ int main(int argc, char** argv) {
         printf("MSVC time: %.4f\n", msvc_elapsed);
         printf("Linker time: %.4f\n", linker_elapsed);
         fflush(stdout);
+    }
+
+    if (postbuild_cmd) {
+        system(postbuild_cmd);
     }
         
     return 0;

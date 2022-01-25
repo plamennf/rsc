@@ -201,4 +201,14 @@ inline char *to_upper(char *text) {
     return result;
 }
 
+inline char *concatenate(char *a, char *b) {
+    umm a_len = get_string_length(a);
+    umm b_len = get_string_length(b);
+    char *result = new char[a_len + b_len + 1];
+    memcpy(result, a, a_len);
+    memcpy(result + a_len, b, b_len);
+    result[a_len + b_len] = 0;
+    return result;
+}
+
 #endif
