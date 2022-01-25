@@ -11,6 +11,7 @@ static Array<char> linker_line(1024);
 struct Rsc_Dir {
     char *name = NULL;
     u64 last_write_time = 0;
+    bool is_external = false;
 };
 
 struct Rsc_File {
@@ -121,7 +122,7 @@ static bool find_string_in_array(const Array<char *> &array, char *string) {
     return result;
 }
 
-static char *find_path_of_include(Rsc_Data *data, char *file_path, char *included_in) {
+static char *find_path_of_include(Rsc_Data *data, char *file_path, char *included_in, bool *is_external) {
     {
         char *char_loc = find_character_from_left(included_in, '/');
         if (!char_loc) {
@@ -133,11 +134,12 @@ static char *find_path_of_include(Rsc_Data *data, char *file_path, char *include
             defer { delete[] dir; };
             dir[get_string_length(included_in) - get_string_length(char_loc)] = 0;
                 //dir += 1;
-
+            
             char full_path[1024] = {};
             stbsp_snprintf(full_path, sizeof(full_path), "%s/%s", dir, file_path);
             
             if (file_exists(full_path)) {
+                if (is_external) *is_external = false;
                 return copy_string(full_path);
             }
         }
@@ -149,8 +151,9 @@ static char *find_path_of_include(Rsc_Data *data, char *file_path, char *include
             char *dir = data->includedirs[i].name;
             char full_path[1024] = {};
             stbsp_snprintf(full_path, sizeof(full_path), "%s/%s", dir, file_path);
-
+            
             if (file_exists(full_path)) {
+                if (is_external) *is_external = true;
                 return copy_string(full_path);
             }
         }
@@ -188,10 +191,12 @@ static void parse_file(Rsc_Data *data, Rsc_File *file) {
         }
 
         Rsc_Dir dir = {};
-        char *path = find_path_of_include(data, include, file->name);
+        bool is_external = false;
+        char *path = find_path_of_include(data, include, file->name, &is_external);
         if (!path) return;
         dir.name = path;
         dir.last_write_time = get_last_write_time(dir.name);
+        dir.is_external = is_external;
         file->includes.add(dir);
     }
 }
@@ -629,8 +634,10 @@ int main(int argc, char** argv) {
 
             for (umm j = 0; j < file->includes.count; j++) {
                 Rsc_Dir include = file->includes[j];
-                if (!find_string_in_array(counted_files, include.name)) {
-                    total_line_count += get_line_count(include.name);
+                if (!include.is_external) {
+                    if (!find_string_in_array(counted_files, include.name)) {
+                        total_line_count += get_line_count(include.name);
+                    }
                 }
             }
             
@@ -705,7 +712,7 @@ int main(int argc, char** argv) {
     compiler_line.add(0);
     linker_line.add(0);
 
-    printf("Line count(including blank lines and comments and included headers(without crt)): %llu\n", total_line_count);
+    printf("Line count(including blank lines and comments): %llu\n", total_line_count);
     fflush(stdout);
     
     if (has_files_to_compile) {
