@@ -53,9 +53,10 @@ struct Rsc_Data {
     bool libdirs_set = false;
     Array<Rsc_Dir> libs;
     bool libs_set = false;
-
+    
     Array<Configuration> configurations;
     Array<Rsc_File *> files;
+    Array<char *> headers;
 
     char *subsystem = NULL;
     char *custom_compiler_line = NULL;
@@ -215,6 +216,7 @@ static Rsc_Data *parse_rsc_file(char *file_path) {
     bool is_in_libdirs = false;
     bool is_in_libs = false;
     bool is_in_files = false;
+    bool is_in_headers = false;
     for (;;) {
         char *line = consume_next_line(&at);
         if (!line) break;
@@ -263,6 +265,7 @@ static Rsc_Data *parse_rsc_file(char *file_path) {
             is_in_libdirs = false;
             is_in_libs = false;
             is_in_files = false;
+            is_in_headers = false;
         } else if (strstr(line, "includedirs")) {
             is_in_includedirs = true;
             if (is_in_configuration) current_configuration->includedirs_set = true;
@@ -281,6 +284,8 @@ static Rsc_Data *parse_rsc_file(char *file_path) {
             else out_data->libs_set = true;
         } else if (strstr(line, "files")) {
             is_in_files = true;
+        } else if (strstr(line, "headers")) {
+            is_in_headers = true;
         } else if (strstr(line, "customcompilerline")) {
             line = eat_spaces(line);
             line = eat_trailing_spaces(line);
@@ -387,6 +392,11 @@ static Rsc_Data *parse_rsc_file(char *file_path) {
                 file->name = copy_string(line);
                 file->last_write_time = get_last_write_time(file->name);
                 out_data->files.add(file);
+            } else if (is_in_headers) {
+                line = eat_spaces(line);
+                line = eat_trailing_spaces(line);
+                char *name = copy_string(line);
+                out_data->headers.add(name);
             }
         }
     }
@@ -599,27 +609,25 @@ int main(int argc, char** argv) {
         write_compiler_line(" %s ", custom_compiler_line);
     }
 
-    Array<char *> counted_files;
     umm total_line_count = 0;
+
+    for (umm i = 0; i < data->headers.count; i++) {
+        char *name = data->headers[i];
+        total_line_count += get_line_count(name);
+    }
+
+    for (umm i = 0; i < data->files.count; i++) {
+        char *name = data->files[i]->name;
+        total_line_count += get_line_count(name);
+    }
     
     bool has_files_to_compile = false;
     if (rebuild_all_files) {
         has_files_to_compile = true;
-
+        
         for (umm i = 0; i < data->files.count; i++) {
             Rsc_File *file = data->files[i];
-
             parse_file(data, file);
-                        
-            total_line_count += get_line_count(file->name);
-            counted_files.add(file->name);
-
-            for (umm j = 0; j < file->includes.count; j++) {
-                Rsc_Dir include = file->includes[j];
-                if (!find_string_in_array(counted_files, include.name)) {
-                    total_line_count += get_line_count(include.name);
-                }
-            }
 
             write_compiler_line("\"%s\\%s\" ", directory, file->name);
         }
@@ -628,19 +636,7 @@ int main(int argc, char** argv) {
             Rsc_File *file = data->files[i];
 
             parse_file(data, file);
-        
-            total_line_count += get_line_count(file->name);
-            counted_files.add(file->name);
 
-            for (umm j = 0; j < file->includes.count; j++) {
-                Rsc_Dir include = file->includes[j];
-                if (!include.is_external) {
-                    if (!find_string_in_array(counted_files, include.name)) {
-                        total_line_count += get_line_count(include.name);
-                    }
-                }
-            }
-            
             bool add_file_to_compile_list = false;
             if (file->last_write_time < exe_last_write_time) {
                 for (umm j = 0; j < file->includes.count; j++) {
