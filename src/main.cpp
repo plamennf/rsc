@@ -591,7 +591,7 @@ int main(int argc, char** argv) {
     }
 
     if (debug_symbols) {
-        write_compiler_line("-Zi ");
+        write_compiler_line("-Zi /DEBUG ");
     }
 
     for (umm i = 0; i < defines.count; i++) {
@@ -604,7 +604,8 @@ int main(int argc, char** argv) {
     }
 
     write_compiler_line("/Fo\"%s\\%s\\\\\" ", directory, objdir);
-
+    write_compiler_line("/Fd\"%s\\%s\\\\\" ", directory, outputdir);
+    
     if (custom_compiler_line) {
         write_compiler_line(" %s ", custom_compiler_line);
     }
@@ -660,14 +661,20 @@ int main(int argc, char** argv) {
     
     write_linker_line("link /nologo ");
 
+    if (debug_symbols) {
+        write_linker_line(" vc140.pdb ");
+        write_linker_line("/DEBUG ");
+        write_linker_line("/Fd\"%s\\%s\\\\\" ", directory, outputdir);
+    }
+    
     for (umm i = 0; i < data->files.count; i++) {
         Rsc_File *file = data->files[i];
 
         char *name = file->name; // Already used the file->name so we can change it.
 
-        char *char_loc = find_character_from_left(name, '/');
+        char *char_loc = find_character_from_right(name, '/');
         if (!char_loc) {
-            char_loc = find_character_from_left(name, '\\');
+            char_loc = find_character_from_right(name, '\\');
         }
 
         char_loc += 1;
@@ -692,7 +699,7 @@ int main(int argc, char** argv) {
     }
 
     write_linker_line("user32.lib gdi32.lib shell32.lib kernel32.lib winmm.lib ");
-
+    
     for (umm i = 0; i < libs.count; i++) {
         Rsc_Dir &lib = libs[i];
         write_linker_line("%s ", lib.name);
@@ -724,10 +731,12 @@ int main(int argc, char** argv) {
         double rsc_end_time = get_time();
         double rsc_elapsed = rsc_end_time - rsc_start_time;
         double msvc_start_time = get_time();
+        printf("Compiler line: %s\n", compiler_line.data);
         system(compiler_line.data);
         double msvc_end_time = get_time();
         double msvc_elapsed = msvc_end_time - msvc_start_time;
         double linker_start_time = get_time();
+        printf("Link line: %s\n", linker_line.data);
         system(linker_line.data);
         double linker_end_time = get_time();
         double linker_elapsed = linker_end_time - linker_start_time;
