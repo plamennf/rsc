@@ -102,11 +102,28 @@ static umm get_line_count(char *file_path) {
     char *data = read_entire_file(file_path);
     defer { delete[] data; };
 
+    bool in_c_comment = false;
     char *at = data;
     for (;;) {
         char *line = consume_next_line(&at);
         if (!line) break;
 
+        if (in_c_comment) continue;
+        
+        line = eat_spaces(line);
+        if (strings_match(line, "")) continue;
+        if (line[0] == '/' && line[1] == '/') continue;
+
+        if (line[0] == '/' && line[1] == '*') {
+            in_c_comment = true;
+            continue;
+        }
+
+        if (line[0] == '*' && line[1] == '/') {
+            in_c_comment = false;
+            continue;
+        }
+        
         result++;
     }
     
@@ -715,7 +732,7 @@ int main(int argc, char** argv) {
     compiler_line.add(0);
     linker_line.add(0);
 
-    printf("Line count(including blank lines and comments): %llu\n", total_line_count);
+    printf("Line count: %llu\n", total_line_count);
     fflush(stdout);
     
     if (has_files_to_compile) {
