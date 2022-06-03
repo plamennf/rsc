@@ -34,6 +34,8 @@ struct Configuration {
     bool libdirs_set = false;
     Array<Rsc_Dir> libs;
     bool libs_set = false;
+    Array <char *> defines;
+    bool defines_set = false;
 
     char *subsystem = NULL;
     char *custom_compiler_line = NULL;
@@ -53,6 +55,8 @@ struct Rsc_Data {
     bool libdirs_set = false;
     Array<Rsc_Dir> libs;
     bool libs_set = false;
+    Array <char *> defines;
+    bool defines_set = false;
     
     Array<Configuration> configurations;
     Array<Rsc_File *> files;
@@ -234,6 +238,7 @@ static Rsc_Data *parse_rsc_file(char *file_path) {
     bool is_in_libs = false;
     bool is_in_files = false;
     bool is_in_headers = false;
+    bool is_in_defines = false;
     for (;;) {
         char *line = consume_next_line(&at);
         if (!line) break;
@@ -283,6 +288,7 @@ static Rsc_Data *parse_rsc_file(char *file_path) {
             is_in_libs = false;
             is_in_files = false;
             is_in_headers = false;
+            is_in_defines = 0;
         } else if (strstr(line, "includedirs")) {
             is_in_includedirs = true;
             if (is_in_configuration) current_configuration->includedirs_set = true;
@@ -303,6 +309,10 @@ static Rsc_Data *parse_rsc_file(char *file_path) {
             is_in_files = true;
         } else if (strstr(line, "headers")) {
             is_in_headers = true;
+        } else if (strstr(line, "defines")) {
+            is_in_defines = true;
+            if (is_in_configuration && current_configuration) current_configuration->defines_set = true;
+            else out_data->defines_set = true;
         } else if (strstr(line, "customcompilerline")) {
             line = eat_spaces(line);
             line = eat_trailing_spaces(line);
@@ -414,6 +424,15 @@ static Rsc_Data *parse_rsc_file(char *file_path) {
                 line = eat_trailing_spaces(line);
                 char *name = copy_string(line);
                 out_data->headers.add(name);
+            } else if (is_in_defines) {
+                line = eat_spaces(line);
+                line = eat_trailing_spaces(line);
+                char *define = copy_string(line);
+                if (is_in_configuration && current_configuration) {
+                    current_configuration->defines.add(define);
+                } else {
+                    out_data->defines.add(define);
+                }
             }
         }
     }
@@ -513,6 +532,9 @@ int main(int argc, char** argv) {
     bool debug_symbols = false;
     
     Array<char *> defines;
+    if (data->defines_set) {
+        defines.add(data->defines);
+    }
     
 #ifdef OS_WINDOWS
     defines.add("OS_WINDOWS");
@@ -586,6 +608,10 @@ int main(int argc, char** argv) {
 
             defines.add(copy_string(to_upper(current_data.name)));
 
+            if (current_data.defines_set) {
+                defines.add(current_data.defines);
+            }
+            
             break;
         }
     }
