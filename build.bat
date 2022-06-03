@@ -1,7 +1,7 @@
 @echo off
 
-if not exist bin mkdir bin
-pushd bin
+if not exist build mkdir build
+pushd build
 
 set CompilerFlags= -Od -Ob0 -Oi -Zi -FC -Fe:"rsc" -nologo -W3 -fp:fast -fp:except- -Gm- -GR- -EHa- -GS- -Gs9999999
 set Defines= -DBUILD_INTERNAL=1 -DBUILD_SLOW=1 -DBUILD_WIN32 -DCOMPILER_MSVC=1 -D_CRT_SECURE_NO_WARNINGS=1

@@ -25,11 +25,11 @@ libs {
     opengl32.lib
 }
 
+headers {
+    tests\bruh.h
+}
+
 files {
     tests\test.cpp
     tests\bruh.cpp
 }
-
-customcompilerline: -W3 -MTd -EHsc- -std:c++20
-customlinkerline: -NODEFAULTLIB
-

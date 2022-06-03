@@ -1,9 +1,9 @@
 #include "bruh.h"
 
 #include <stdlib.h>
+#include <math.h>
 
 int main() {
-    //float a = sinf(0.35f);
-    bruh("Hello, World! %f\n");
+    bruh("Hello, World!\n");
     return 0;
 }

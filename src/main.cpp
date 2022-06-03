@@ -412,7 +412,7 @@ static void write_compiler_line(char *text, ...) {
     va_start(args, text);
     stbsp_vsnprintf(buffer, sizeof(buffer), text, args);
     va_end(args);
-
+    
     for (umm i = 0; i < get_string_length(buffer); i++) {
         compiler_line.add(buffer[i]);
     }
@@ -564,8 +564,8 @@ int main(int argc, char** argv) {
                 }
             }
 
-            if (strings_match(current_data.name, "debug")) debug_symbols = true;
-            else if (strings_match(current_data.name, "release")) optimizations = true;
+            if (strings_match(current_data.name, "DEBUG")) debug_symbols = true;
+            else if (strings_match(current_data.name, "RELEASE")) optimizations = true;
 
             defines.add(copy_string(to_upper(current_data.name)));
 
@@ -583,7 +583,7 @@ int main(int argc, char** argv) {
     }
     
     write_compiler_line("cl -c -nologo -Oi -FC -EHsc -fp:fast -fp:except- ");
-
+    
     if (optimizations) {
         write_compiler_line("-02 -Ob2 -MT ");
     } else {
@@ -602,7 +602,7 @@ int main(int argc, char** argv) {
         Rsc_Dir &includedir = includedirs[i];
         write_compiler_line("-I \"%s\\%s\" ", directory, includedir.name);
     }
-
+    
     write_compiler_line("/Fo\"%s\\%s\\\\\" ", directory, objdir);
     write_compiler_line("/Fd\"%s\\%s\\\\\" ", directory, outputdir);
     
@@ -662,9 +662,9 @@ int main(int argc, char** argv) {
     write_linker_line("link /nologo ");
 
     if (debug_symbols) {
-        write_linker_line(" vc140.pdb ");
+        //write_linker_line(" vc140.pdb ");
         write_linker_line("/DEBUG ");
-        write_linker_line("/Fd\"%s\\%s\\\\\" ", directory, outputdir);
+        //write_linker_line("/Fd\"%s\\%s\\\\\" ", directory, outputdir);
     }
     
     for (umm i = 0; i < data->files.count; i++) {
@@ -732,20 +732,26 @@ int main(int argc, char** argv) {
         double rsc_elapsed = rsc_end_time - rsc_start_time;
         double msvc_start_time = get_time();
         printf("Compiler line: %s\n", compiler_line.data);
+        fflush(stdout);
         system(compiler_line.data);
         double msvc_end_time = get_time();
         double msvc_elapsed = msvc_end_time - msvc_start_time;
         double linker_start_time = get_time();
         printf("Link line: %s\n", linker_line.data);
+        fflush(stdout);
         system(linker_line.data);
         double linker_end_time = get_time();
         double linker_elapsed = linker_end_time - linker_start_time;
         stbsp_sprintf(command, "popd", outputdir);
+        fflush(stdout);
         system(command);
 
         printf("Total time: %.4f\n", rsc_elapsed + msvc_elapsed + linker_elapsed);
+        fflush(stdout);
         printf("RSC time: %.4f\n", rsc_elapsed);
+        fflush(stdout);
         printf("MSVC time: %.4f\n", msvc_elapsed);
+        fflush(stdout);
         printf("Linker time: %.4f\n", linker_elapsed);
         fflush(stdout);
     }

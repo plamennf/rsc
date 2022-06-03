@@ -1,6 +1,4 @@
 @echo off
 
-bin\rsc.exe tests\test.rsc -configuration:debug
-bin\rsc.exe tests\test.rsc -configuration:release
+build\rsc.exe tests\test.rsc -configuration:Debug -B
 bin\debug\main_debug.exe
-bin\main.exe
