@@ -27,7 +27,7 @@ struct Configuration {
     char *outputdir = NULL;
     char *objdir = NULL;
     char *exename = NULL;
-
+    
     Array<Rsc_Dir> includedirs;
     bool includedirs_set = false;
     Array<Rsc_Dir> libdirs;
@@ -135,13 +135,12 @@ static umm get_line_count(char *file_path) {
 }
 
 static bool find_string_in_array(const Array<char *> &array, char *string) {
-    bool result = false;
     for (umm i = 0; i < array.count; i++) {
         if (strings_match(array[i], string)) {
-            result = true;
+            return true;
         }
     }
-    return result;
+    return false;
 }
 
 static char *find_path_of_include(Rsc_Data *data, char *file_path, char *included_in, bool *is_external) {
@@ -190,8 +189,11 @@ static void parse_file(Rsc_Data *data, Rsc_File *file) {
     defer { delete[] file_data; };
 
     char *at = file_data;
-    while (at = strstr(at, "#include")) {
+    while (true) { // at = strstr(at, "#include")
         char *line = consume_next_line(&at);
+        if (!line) break;
+        if (!strstr(line, "#include")) continue;
+        
         line += get_string_length("#include");
         line = eat_spaces(line);
         line = eat_trailing_spaces(line);
@@ -215,7 +217,7 @@ static void parse_file(Rsc_Data *data, Rsc_File *file) {
         Rsc_Dir dir = {};
         bool is_external = false;
         char *path = find_path_of_include(data, include, file->name, &is_external);
-        if (!path) return;
+        if (!path) continue;
         dir.name = path;
         dir.last_write_time = get_last_write_time(dir.name);
         dir.is_external = is_external;
