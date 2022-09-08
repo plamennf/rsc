@@ -12,6 +12,7 @@ double rsc_start_time = 0.0;
 enum Output_Type {
     OUTPUT_UNKNOWN,
     OUTPUT_CONSOLE_APP,
+    OUTPUT_WINDOWED_APP,
 };
 
 enum Runtime_Type {
@@ -204,13 +205,22 @@ void Rsc_Data::parse_file(char *filepath) {
                 line++;
             }
             type_string.add(0);
-            
+
+            Output_Type type = OUTPUT_UNKNOWN;
             if (strings_match(type_string.data, "ConsoleApp")) {
-                current_project->type = OUTPUT_CONSOLE_APP;
+                type = OUTPUT_CONSOLE_APP;
+            } else if (strings_match(type_string.data, "WindowedApp")) {
+                type = OUTPUT_WINDOWED_APP;
             } else {
                 handler.report_error("Invalid value for type. Valid values are:");
                 handler.report_error("   ConsoleApp\n");
                 exit(1);
+            }
+
+            if (is_in_configuration_filter && current_configuration) {
+                current_configuration->type = type;
+            } else {
+                current_project->type = type;
             }
         } else if (starts_with(line, "outputdir")) {
             if (!is_in_project) {
@@ -1081,6 +1091,9 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
     
     if (project->type == OUTPUT_CONSOLE_APP) {
         char *line = tprint("-subsystem:console -OUT:%s\\%s.exe ", outputdir, outputname);
+        linker_line.add(line, get_string_length(line));
+    } else if (project->type == OUTPUT_WINDOWED_APP) {
+        char *line = tprint("-subsystem:windows -OUT:%s\\%s.exe ", outputdir, outputname);
         linker_line.add(line, get_string_length(line));
     }
 
