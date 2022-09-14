@@ -98,8 +98,6 @@ s64 get_temporary_storage_mark();
 void set_temporary_storage_mark(s64 mark);
 void *talloc(s64 mark, s64 alignment = 8);
 
-#define GetStruct(Type) (Type *)talloc(sizeof(Type))
-
 char *sprint(char *fmt, ...);
 char *sprint_valist(char *fmt, va_list args);
 char *tprint(char *fmt, ...);

@@ -5,8 +5,6 @@
 
 #include <stdio.h>
 
-char *working_directory = NULL;
-
 double rsc_start_time = 0.0;
 
 enum Output_Type {
