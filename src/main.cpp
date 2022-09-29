@@ -11,6 +11,7 @@ enum Output_Type {
     OUTPUT_UNKNOWN,
     OUTPUT_CONSOLE_APP,
     OUTPUT_WINDOWED_APP,
+    OUTPUT_STATIC_LIB,
 };
 
 enum Runtime_Type {
@@ -93,6 +94,57 @@ struct Command_Line_Arguments {
     char *configuration = NULL;
     bool rebuild_all = false;
 };
+
+static char *do_macro_substitutions(char *s, Rsc_Project *project, Configuration *configuration) {
+    Array <char> sanitized_s;
+    for (char *at = s; *at;) {
+        if (at[0] == '%') {
+            if (at[1] != '{') {
+                log_error("Macros always start with %{ and end with }\n");
+                exit(1);
+            }
+            at += 2;
+
+            Array <char> macro_name;
+            while (1) {
+                if (at[0] == 0) {
+                    log_error("EOF found while parsing string.\n");
+                    exit(1);
+                }
+                if (at[0] == '}') break;
+
+                macro_name.add(at[0]);
+                at++;
+            }
+            at++;
+            macro_name.add(0);
+
+            if (strings_match(macro_name.data, "ProjectName")) {
+                sanitized_s.add(project->name, get_string_length(project->name));
+            } else if (strings_match(macro_name.data, "Configuration")) {
+                sanitized_s.add(configuration->name, get_string_length(configuration->name));
+            } else if (strings_match(macro_name.data, "OutputDir")) {
+                char *outputdir = tprint("build\\%s", configuration->name);
+                if (project->outputdir) outputdir = project->outputdir;
+                if (configuration->outputdir) outputdir = configuration->outputdir;
+                replace_forwardslash_with_backslash(outputdir);
+                outputdir = do_macro_substitutions(outputdir, project, configuration);
+                sanitized_s.add(outputdir, get_string_length(outputdir));
+            } else {
+                log_error("Invalid value for macro. Valid values are:\n");
+                log_error("   ProjectName\n");
+                log_error("   Configuration\n");
+                log_error("   OutputDir\n");
+                exit(1);
+            }
+        } else {
+            sanitized_s.add(at[0]);
+            at++;
+        }
+    }
+    sanitized_s.add(0);
+    return sanitized_s.copy_to_array();
+}
 
 static Command_Line_Arguments parse_command_line_arguments(int argc, char **argv) {
     Command_Line_Arguments result;
@@ -209,6 +261,8 @@ void Rsc_Data::parse_file(char *filepath) {
                 type = OUTPUT_CONSOLE_APP;
             } else if (strings_match(type_string.data, "WindowedApp")) {
                 type = OUTPUT_WINDOWED_APP;
+            } else if (strings_match(type_string.data, "StaticLib")) {
+                type = OUTPUT_STATIC_LIB;
             } else {
                 handler.report_error("Invalid value for type. Valid values are:");
                 handler.report_error("   ConsoleApp\n");
@@ -252,46 +306,10 @@ void Rsc_Data::parse_file(char *filepath) {
             }
             outputdir_string.add(0);
 
-            Array <char> sanitized_outputdir_string;
-            for (char *at = outputdir_string.data; *at;) {
-                if (at[0] == '%') {
-                    if (at[1] != '{') {
-                        handler.report_error("Macros always start with %{ and end with }");
-                        exit(1);
-                    }
-                    at += 2;
-
-                    Array <char> macro_name;
-                    while (1) {
-                        if (at[0] == 0) {
-                            handler.report_error("EOF found while parsing string.");
-                            exit(1);
-                        }
-                        if (at[0] == '}') break;
-
-                        macro_name.add(at[0]);
-                        at++;
-                    }
-                    at++;
-                    macro_name.add(0);
-
-                    if (strings_match(macro_name.data, "ProjectName")) {
-                        sanitized_outputdir_string.add(current_project->name, get_string_length(current_project->name));
-                    } else {
-                        handler.report_error("Invalid value for macro. Valid values are:");
-                        handler.report_error("   ProjectName\n");
-                        exit(1);
-                    }
-                } else {
-                    sanitized_outputdir_string.add(at[0]);
-                    at++;
-                }
-            }
-
             if (is_in_configuration_filter && current_configuration) {
-                current_configuration->outputdir = temp_copy_string(sanitized_outputdir_string.data);
+                current_configuration->outputdir = temp_copy_string(outputdir_string.data);
             } else {
-                current_project->outputdir = temp_copy_string(sanitized_outputdir_string.data);
+                current_project->outputdir = temp_copy_string(outputdir_string.data);
             }
         } else if (starts_with(line, "objdir")) {
             if (!is_in_project) {
@@ -325,46 +343,10 @@ void Rsc_Data::parse_file(char *filepath) {
             }
             objdir_string.add(0);
 
-            Array <char> sanitized_objdir_string;
-            for (char *at = objdir_string.data; *at;) {
-                if (at[0] == '%') {
-                    if (at[1] != '{') {
-                        handler.report_error("Macros always start with %{ and end with }");
-                        exit(1);
-                    }
-                    at += 2;
-
-                    Array <char> macro_name;
-                    while (1) {
-                        if (at[0] == 0) {
-                            handler.report_error("EOF found while parsing string.");
-                            exit(1);
-                        }
-                        if (at[0] == '}') break;
-
-                        macro_name.add(at[0]);
-                        at++;
-                    }
-                    at++;
-                    macro_name.add(0);
-
-                    if (strings_match(macro_name.data, "ProjectName")) {
-                        sanitized_objdir_string.add(current_project->name, get_string_length(current_project->name));
-                    } else {
-                        handler.report_error("Invalid value for macro. Valid values are:");
-                        handler.report_error("   ProjectName\n");
-                        exit(1);
-                    }
-                } else {
-                    sanitized_objdir_string.add(at[0]);
-                    at++;
-                }
-            }
-
             if (is_in_configuration_filter && current_configuration) {
-                current_configuration->objdir = temp_copy_string(sanitized_objdir_string.data);
+                current_configuration->objdir = temp_copy_string(objdir_string.data);
             } else {
-                current_project->objdir = temp_copy_string(sanitized_objdir_string.data);
+                current_project->objdir = temp_copy_string(objdir_string.data);
             }
         } else if (starts_with(line, "outputname")) {
             if (!is_in_project) {
@@ -397,47 +379,11 @@ void Rsc_Data::parse_file(char *filepath) {
                 line++;
             }
             outputname_string.add(0);
-
-            Array <char> sanitized_outputname_string;
-            for (char *at = outputname_string.data; *at;) {
-                if (at[0] == '%') {
-                    if (at[1] != '{') {
-                        handler.report_error("Macros always start with %{ and end with }");
-                        exit(1);
-                    }
-                    at += 2;
-
-                    Array <char> macro_name;
-                    while (1) {
-                        if (at[0] == 0) {
-                            handler.report_error("EOF found while parsing string.");
-                            exit(1);
-                        }
-                        if (at[0] == '}') break;
-
-                        macro_name.add(at[0]);
-                        at++;
-                    }
-                    at++;
-                    macro_name.add(0);
-
-                    if (strings_match(macro_name.data, "ProjectName")) {
-                        sanitized_outputname_string.add(current_project->name, get_string_length(current_project->name));
-                    } else {
-                        handler.report_error("Invalid value for macro. Valid values are:");
-                        handler.report_error("   ProjectName\n");
-                        exit(1);
-                    }
-                } else {
-                    sanitized_outputname_string.add(at[0]);
-                    at++;
-                }
-            }
-
+            
             if (is_in_configuration_filter && current_configuration) {
-                current_configuration->outputname = temp_copy_string(sanitized_outputname_string.data);
+                current_configuration->outputname = temp_copy_string(outputname_string.data);
             } else {
-                current_project->outputname = temp_copy_string(sanitized_outputname_string.data);
+                current_project->outputname = temp_copy_string(outputname_string.data);
             }
         } else if (starts_with(line, "cfiles")) {
             is_in_cfiles = true;
@@ -841,16 +787,19 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
     if (project->outputdir) outputdir = project->outputdir;
     if (configuration->outputdir) outputdir = configuration->outputdir;
     replace_forwardslash_with_backslash(outputdir);
-
+    outputdir = do_macro_substitutions(outputdir, project, configuration); // @Leak
+    
     char *objdir = tprint("obj\\%s\\%s", project->name, configuration->name);
     if (project->objdir) objdir = project->objdir;
     if (configuration->objdir) objdir = configuration->objdir;
     replace_forwardslash_with_backslash(objdir);
+    objdir = do_macro_substitutions(objdir, project, configuration); // @Leak
 
     char *outputname = project->name;
     if (project->outputname) outputname = project->outputname;
     if (configuration->outputname) outputname = configuration->outputname;
     replace_forwardslash_with_backslash(outputname);
+    outputname = do_macro_substitutions(outputname, project, configuration); // @Leak
     
     u64 exe_modtime = 0;
     char *exepath = tprint("%s/%s.exe", outputdir, outputname);
@@ -990,6 +939,9 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
     for (int i = 0; i < includedirs.count; i++) {
         char *dir = includedirs[i];
         replace_forwardslash_with_backslash(dir);
+        
+        dir = do_macro_substitutions(dir, project, configuration); // @Leak
+        
         char *line = tprint("/I %s ", dir);
         compiler_line.add(line, get_string_length(line));
     }
@@ -1011,12 +963,18 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
     Array <char> linker_line;
     {
         char *line = "link /nologo ";
+        if (project->type == OUTPUT_STATIC_LIB) {
+            line = "lib /nologo ";
+        }
         linker_line.add(line, get_string_length(line));
     }
 
     for (int i = 0; i < libdirs.count; i++) {
         char *dir = libdirs[i];
         replace_forwardslash_with_backslash(dir);
+
+        dir = do_macro_substitutions(dir, project, configuration); // @Leak
+        
         char *line = tprint("/LIBPATH:\"%s\" ", dir);
         linker_line.add(line, get_string_length(line));
     }
@@ -1043,7 +1001,7 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
         char *line = tprint("%s\\%s.obj ", objdir, name.data);
         linker_line.add(line, get_string_length(line));
     }
-
+    
     {
         char *at = outputdir;
         bool is_first_slash = true;
@@ -1082,18 +1040,27 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
         }        
     }
 
-    if (debug_symbols) {
+    if (debug_symbols && project->type != OUTPUT_STATIC_LIB) {
         char *line = "/DEBUG ";
         linker_line.add(line, get_string_length(line));
     }
     
     if (project->type == OUTPUT_CONSOLE_APP) {
-        char *line = tprint("-subsystem:console -OUT:%s\\%s.exe ", outputdir, outputname);
+        char *line = "/subsystem:console ";
         linker_line.add(line, get_string_length(line));
     } else if (project->type == OUTPUT_WINDOWED_APP) {
-        char *line = tprint("-subsystem:windows -OUT:%s\\%s.exe ", outputdir, outputname);
+        char *line = "/subsystem:windows ";
         linker_line.add(line, get_string_length(line));
     }
+
+    {
+        char *extension = "exe";
+        if (project->type == OUTPUT_STATIC_LIB) {
+            extension = "lib";
+        }
+        char *line = tprint("/OUT:%s\\%s.%s ", outputdir, outputname, extension);
+        linker_line.add(line, get_string_length(line));
+    }            
 
     double rsc_end_time = os_get_time();
     double rsc_time = rsc_end_time - rsc_start_time;
@@ -1125,6 +1092,10 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
 }
 
 int main(int argc, char **argv) {
+#ifdef _DEBUG
+    system("vars.bat");
+#endif
+    
     rsc_start_time = os_get_time();
     
     os_init_colors_and_utf8();
