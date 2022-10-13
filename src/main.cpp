@@ -1006,7 +1006,8 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
         char *at = outputdir;
         bool is_first_slash = true;
         while (true) {
-            char *dir = temp_copy_string(outputdir);
+            char *dir = copy_string(outputdir);
+            defer { delete [] dir; };
             char *slash = strchr(at, '\\');
             if (!slash) {
                 if (!is_first_slash) break;
@@ -1025,7 +1026,8 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
         char *at = objdir;
         bool is_first_slash = true;
         while (true) {
-            char *dir = temp_copy_string(objdir);
+            char *dir = copy_string(objdir);
+            defer { delete [] dir; };
             char *slash = strchr(at, '\\');
             if (!slash) {
                 if (!is_first_slash) break;
