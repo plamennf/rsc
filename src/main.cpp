@@ -1001,45 +1001,10 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
         char *line = tprint("%s\\%s.obj ", objdir, name.data);
         linker_line.add(line, get_string_length(line));
     }
+
+    os_make_directory_if_not_exist(outputdir);
+    os_make_directory_if_not_exist(objdir);
     
-    {
-        char *at = outputdir;
-        bool is_first_slash = true;
-        while (true) {
-            char *dir = copy_string(outputdir);
-            char *slash = strchr(at, '\\');
-            if (!slash) {
-                if (!is_first_slash) break;
-                is_first_slash = false;
-            }
-            
-            dir[get_string_length(dir) - get_string_length(slash)] = 0;
-            
-            os_make_directory_if_not_exist(dir);
-
-            at += get_string_length(dir) + 1;
-        }
-    }
-
-    {
-        char *at = objdir;
-        bool is_first_slash = true;
-        while (true) {
-            char *dir = copy_string(objdir);
-            char *slash = strchr(at, '\\');
-            if (!slash) {
-                if (!is_first_slash) break;
-                is_first_slash = false;
-            }
-            
-            dir[get_string_length(dir) - get_string_length(slash)] = 0;
-            
-            os_make_directory_if_not_exist(dir);
-
-            at += get_string_length(dir) + 1;
-        }        
-    }
-
     if (debug_symbols && project->type != OUTPUT_STATIC_LIB) {
         char *line = "/DEBUG ";
         linker_line.add(line, get_string_length(line));
@@ -1058,9 +1023,10 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
         if (project->type == OUTPUT_STATIC_LIB) {
             extension = "lib";
         }
-        char *line = tprint("/OUT:%s\\%s.%s ", outputdir, outputname, extension);
+        char *line = sprint("/OUT:%s\\%s.%s ", outputdir, outputname, extension);
+        defer { delete [] line; };
         linker_line.add(line, get_string_length(line));
-    }            
+    }
 
     double rsc_end_time = os_get_time();
     double rsc_time = rsc_end_time - rsc_start_time;

@@ -10,7 +10,7 @@ wchar_t *utf8_to_wstring(char *string) {
     int required_size = MultiByteToWideChar(CP_UTF8, 0, string, -1, nullptr, 0);
     if (!required_size) return nullptr;
 
-    wchar_t *result = static_cast <wchar_t *>(talloc(required_size * sizeof(wchar_t)));
+    wchar_t *result = static_cast <wchar_t *>(talloc((required_size + 1) * sizeof(wchar_t)));
     
     MultiByteToWideChar(CP_UTF8, 0, string, -1, result, required_size);
     
@@ -21,7 +21,7 @@ char *wstring_to_utf8(wchar_t *string) {
     int required_size = WideCharToMultiByte(CP_UTF8, 0, string, -1, nullptr, 0, nullptr, nullptr);
     if (!required_size) return nullptr;
     
-    char *result = static_cast <char *>(talloc(required_size));
+    char *result = static_cast <char *>(talloc(required_size + 1));
     WideCharToMultiByte(CP_UTF8, 0, string, -1, result, required_size, nullptr, nullptr);
     
     return result;
