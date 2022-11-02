@@ -22,15 +22,15 @@ enum Runtime_Type {
 struct Configuration {
     char *name = NULL;
     char *lowercased_name = NULL;
-
+    
     char *outputdir = NULL;
     char *objdir = NULL;
     char *outputname = NULL;
-
+    
     Array <char *> includedirs;
     Array <char *> libdirs;
     Array <char *> libs;
-
+    
     Array <char *> defines;
     
     Output_Type type = OUTPUT_UNKNOWN;
@@ -45,6 +45,9 @@ struct Configuration {
     Runtime_Type runtime_type = RUNTIME_DEBUG;
     
     Array <char *> cfiles;
+
+    char *pchheader = NULL;
+    char *pchsource = NULL;
 };
 
 struct Rsc_Project {
@@ -78,6 +81,9 @@ struct Rsc_Project {
     Runtime_Type runtime_type = RUNTIME_DEBUG;
     
     Array <char *> cfiles;
+
+    char *pchheader = NULL;
+    char *pchsource = NULL;
 };
 
 struct Rsc_Data {
@@ -273,6 +279,85 @@ void Rsc_Data::parse_file(char *filepath) {
                 current_configuration->type = type;
             } else {
                 current_project->type = type;
+            }
+        } else if (starts_with(line, "pchheader")) {
+            if (!is_in_project) {
+                handler.report_error("pchheader can only be set for project.");
+                exit(1);
+            }
+            if (!current_project) {
+                handler.report_error("Internal error: current_project is NULL");
+                exit(1);
+            }
+            
+            line += get_string_length("pchheader");
+
+            line = eat_spaces(line);
+            if (line[0] != '"') {
+                handler.report_error("Expected string after pchheader: String are always wrapped in "".");
+                exit(1);
+            }
+            line++;
+            
+            Array <char> type_string;
+            while (1) {
+                if (line[0] == 0) {
+                    handler.report_error("EOF found while parsing string.");
+                    exit(1);
+                }
+                if (line[0] == '"') break;
+
+                type_string.add(line[0]);
+                line++;
+            }
+            type_string.add(0);
+
+            if (strchr(type_string.data, '/') || strchr(type_string.data, '\\')) {
+                handler.report_error("pchheader should contain only the header name not its directory");
+                exit(1);
+            }
+            
+            if (is_in_configuration_filter && current_configuration) {
+                current_configuration->pchheader = copy_string(type_string.data);
+            } else {
+                current_project->pchheader = copy_string(type_string.data);
+            }
+        } else if (starts_with(line, "pchsource")) {
+            if (!is_in_project) {
+                handler.report_error("pchsource can only be set for project.");
+                exit(1);
+            }
+            if (!current_project) {
+                handler.report_error("Internal error: current_project is NULL");
+                exit(1);
+            }
+            
+            line += get_string_length("pchsource");
+
+            line = eat_spaces(line);
+            if (line[0] != '"') {
+                handler.report_error("Expected string after pchsource: String are always wrapped in "".");
+                exit(1);
+            }
+            line++;
+            
+            Array <char> type_string;
+            while (1) {
+                if (line[0] == 0) {
+                    handler.report_error("EOF found while parsing string.");
+                    exit(1);
+                }
+                if (line[0] == '"') break;
+
+                type_string.add(line[0]);
+                line++;
+            }
+            type_string.add(0);
+
+            if (is_in_configuration_filter && current_configuration) {
+                current_configuration->pchsource = copy_string(type_string.data);
+            } else {
+                current_project->pchsource = copy_string(type_string.data);
             }
         } else if (starts_with(line, "outputdir")) {
             if (!is_in_project) {
@@ -805,9 +890,20 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
     char *exepath = tprint("%s/%s.exe", outputdir, outputname);
     os_get_last_write_time(exepath, &exe_modtime);
 
+    char *pchheader = project->pchheader;
+    if (configuration->pchheader) pchheader = configuration->pchheader;
+    pchheader = replace_forwardslash_with_backslash(pchheader);
+
+    char *pchsource = project->pchsource;
+    if (configuration->pchsource) pchsource = configuration->pchsource;
+    pchsource = replace_forwardslash_with_backslash(pchsource);
+    
     if (rsc_modtime > exe_modtime) {
         data->should_rebuild_all = true;
     }
+
+    os_make_directory_if_not_exist(outputdir);
+    os_make_directory_if_not_exist(objdir);
     
     Array <char *> files_to_compile;
     for (int i = 0; i < project->cfiles.count; i++) {
@@ -848,7 +944,6 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
         char *line = "cl /c /nologo /W3 /diagnostics:column /WL /FC /Oi /EHsc /Zc:strictStrings- /std:c++17 /D_CRT_SECURE_NO_WARNINGS ";
         compiler_line.add(line, get_string_length(line));
     }
-
     bool debug_symbols = project->debug_symbols;
     if (configuration->debug_symbols_set) debug_symbols = configuration->debug_symbols;
     bool optimize = project->optimize;
@@ -886,6 +981,70 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
         compiler_line.add(line, get_string_length(line));
     }
 
+    if (pchheader && !pchsource) {
+        log_error("pchheader set, but pchsource isn't\n");
+        exit(1);
+    }
+
+    if (pchsource && !pchheader) {
+        log_error("pchsource set, but pchheader isn't\n");
+        exit(1);
+    }
+
+    if (pchsource && pchheader) {
+        char *_pchname = copy_string(pchsource); // @LeakMaybe
+        char *slash = strrchr(_pchname, '\\');
+        slash += 1;
+        char *dot = strrchr(slash, '.');
+        if (dot) {
+            slash[dot - slash] = 0;
+        }
+        // @Speed
+        char *pchname = new char[get_string_length(slash) + 4];
+        memcpy(pchname, slash, get_string_length(slash));
+        memcpy(pchname + get_string_length(slash), ".pch", 4);
+
+        Array <char> pch_line;
+        
+        char *line = tprint("cl /c /Yc\"%s\" /nologo /Fo\"%s\\\\\" /Fd\"%s\\\\\" /W3 /diagnostics:column /WL /FC /Oi /EHsc /Zc:strictStrings- /std:c++17 /D_CRT_SECURE_NO_WARNINGS %s ", pchheader, objdir, outputdir, pchsource);
+        pch_line.add(line, get_string_length(line));
+
+        if (static_runtime) {
+            pch_line.add('/');
+            pch_line.add('M');
+            pch_line.add('T');
+        } else {
+            pch_line.add('/');
+            pch_line.add('M');
+            pch_line.add('D');
+        }
+
+        if (runtime_type == RUNTIME_DEBUG) {
+            pch_line.add('d');
+        }
+
+        pch_line.add(' ');
+        
+        if (optimize) {
+            line = "/O2 /Ob2 ";
+            pch_line.add(line, get_string_length(line));
+        } else {
+            line = "/Od /Ob0 ";
+            pch_line.add(line, get_string_length(line));
+        }
+
+        if (debug_symbols) {
+            line = "/Zi /DEBUG ";
+            pch_line.add(line, get_string_length(line));
+        }
+
+        pch_line.add(0);
+        system(pch_line.data);
+  
+        line = tprint("/Yu\"%s\" ", pchheader);
+        compiler_line.add(line, get_string_length(line));
+    }
+    
     {
         char *line = tprint("/Fo\"%s\\\\\" ", objdir);
         compiler_line.add(line, get_string_length(line));
@@ -986,10 +1145,12 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
         linker_line.add(line, get_string_length(line));
     }
     
+    project->cfiles.add(pchsource);
     for (int i = 0; i < project->cfiles.count; i++) {
         char *filename = project->cfiles[i];
 
         char *dir_with_name = temp_copy_strip_extension(filename);
+        dir_with_name = replace_backslash_with_forwardslash(dir_with_name);
         char *slash = strrchr(dir_with_name, '/');
         
         Array <char> name;
@@ -1001,9 +1162,6 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
         char *line = tprint("%s\\%s.obj ", objdir, name.data);
         linker_line.add(line, get_string_length(line));
     }
-
-    os_make_directory_if_not_exist(outputdir);
-    os_make_directory_if_not_exist(objdir);
     
     if (debug_symbols && project->type != OUTPUT_STATIC_LIB) {
         char *line = "/DEBUG ";
