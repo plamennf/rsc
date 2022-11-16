@@ -49,6 +49,9 @@ class ExitScopeHelp {
 
 #define ArrayCount(array) (sizeof(array)/sizeof((array)[0]))
 #define Square(x) ((x)*(x))
+#define Min(x, y) ((x) < (y) ? (x) : (y))
+#define Max(x, y) ((x) > (y) ? (x) : (y))
+#define Clamp(x, a, b) { if ((x) < (a)) (x) = (a); if ((x) > (b)) (x) = (b); }
 
 #define Kilobytes(x) ((x)*1024ULL)
 #define Megabytes(x) (Kilobytes(x)*1024ULL)

@@ -130,7 +130,7 @@ static char *do_macro_substitutions(char *s, Rsc_Project *project, Configuration
             } else if (strings_match(macro_name.data, "Configuration")) {
                 sanitized_s.add(configuration->name, get_string_length(configuration->name));
             } else if (strings_match(macro_name.data, "OutputDir")) {
-                char *outputdir = tprint("build\\%s", configuration->name);
+                char *outputdir = sprint("build\\%s", configuration->name);
                 if (project->outputdir) outputdir = project->outputdir;
                 if (configuration->outputdir) outputdir = configuration->outputdir;
                 replace_forwardslash_with_backslash(outputdir);
@@ -854,7 +854,7 @@ static void check_file_for_includes(char *filename, Array <char *> &includes) {
                 continue;
             }
 
-            char *path = tprint("%s/%s", dir, includename_string.data);
+            char *path = sprint("%s/%s", dir, includename_string.data);
             file_exists = os_file_exists(path);
             if (file_exists) {
                 full_path = path;
@@ -863,18 +863,19 @@ static void check_file_for_includes(char *filename, Array <char *> &includes) {
 
         if (file_exists) {
             includes.add(full_path);
+            check_file_for_includes(full_path, includes);
         }
     }
 }
 
 static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Configuration *configuration, u64 rsc_modtime) {
-    char *outputdir = tprint("build\\%s", configuration->name);
+    char *outputdir = sprint("build\\%s", configuration->name);
     if (project->outputdir) outputdir = project->outputdir;
     if (configuration->outputdir) outputdir = configuration->outputdir;
     replace_forwardslash_with_backslash(outputdir);
     outputdir = do_macro_substitutions(outputdir, project, configuration); // @Leak
     
-    char *objdir = tprint("obj\\%s\\%s", project->name, configuration->name);
+    char *objdir = sprint("obj\\%s\\%s", project->name, configuration->name);
     if (project->objdir) objdir = project->objdir;
     if (configuration->objdir) objdir = configuration->objdir;
     replace_forwardslash_with_backslash(objdir);
@@ -887,7 +888,7 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
     outputname = do_macro_substitutions(outputname, project, configuration); // @Leak
     
     u64 exe_modtime = 0;
-    char *exepath = tprint("%s/%s.exe", outputdir, outputname);
+    char *exepath = sprint("%s/%s.exe", outputdir, outputname);
     os_get_last_write_time(exepath, &exe_modtime);
 
     char *pchheader = project->pchheader;
@@ -1006,7 +1007,7 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
 
         Array <char> pch_line;
         
-        char *line = tprint("cl /c /Yc\"%s\" /nologo /Fo\"%s\\\\\" /Fd\"%s\\\\\" /W3 /diagnostics:column /WL /FC /Oi /EHsc /Zc:strictStrings- /std:c++17 /D_CRT_SECURE_NO_WARNINGS %s ", pchheader, objdir, outputdir, pchsource);
+        char *line = sprint("cl /c /Yc\"%s\" /nologo /Fo\"%s\\\\\" /Fd\"%s\\\\\" /W3 /diagnostics:column /WL /FC /Oi /EHsc /Zc:strictStrings- /std:c++17 /D_CRT_SECURE_NO_WARNINGS %s ", pchheader, objdir, outputdir, pchsource);
         pch_line.add(line, get_string_length(line));
 
         if (static_runtime) {
@@ -1041,17 +1042,17 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
         pch_line.add(0);
         system(pch_line.data);
   
-        line = tprint("/Yu\"%s\" ", pchheader);
+        line = sprint("/Yu\"%s\" ", pchheader);
         compiler_line.add(line, get_string_length(line));
     }
     
     {
-        char *line = tprint("/Fo\"%s\\\\\" ", objdir);
+        char *line = sprint("/Fo\"%s\\\\\" ", objdir);
         compiler_line.add(line, get_string_length(line));
     }
 
     {
-        char *line = tprint("/Fd\"%s\\\\\" ", outputdir); // Make the .pdb file go into the output directory
+        char *line = sprint("/Fd\"%s\\\\\" ", outputdir); // Make the .pdb file go into the output directory
         compiler_line.add(line, get_string_length(line));
     }
 
@@ -1101,7 +1102,7 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
         
         dir = do_macro_substitutions(dir, project, configuration); // @Leak
         
-        char *line = tprint("/I %s ", dir);
+        char *line = sprint("/I %s ", dir);
         compiler_line.add(line, get_string_length(line));
     }
     
@@ -1113,7 +1114,7 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
 
     for (int i = 0; i < defines.count; i++) {
         char *define = defines[i];
-        char *line = tprint("/D%s ", define);
+        char *line = sprint("/D%s ", define);
         compiler_line.add(line, get_string_length(line));
     }
 
@@ -1134,14 +1135,14 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
 
         dir = do_macro_substitutions(dir, project, configuration); // @Leak
         
-        char *line = tprint("/LIBPATH:\"%s\" ", dir);
+        char *line = sprint("/LIBPATH:\"%s\" ", dir);
         linker_line.add(line, get_string_length(line));
     }
 
     for (int i = 0; i < libs.count; i++) {
         char *lib = libs[i];
         replace_forwardslash_with_backslash(lib);
-        char *line = tprint("%s ", lib);
+        char *line = sprint("%s ", lib);
         linker_line.add(line, get_string_length(line));
     }
     
@@ -1159,7 +1160,7 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
         }
         name.add(0);
         
-        char *line = tprint("%s\\%s.obj ", objdir, name.data);
+        char *line = sprint("%s\\%s.obj ", objdir, name.data);
         linker_line.add(line, get_string_length(line));
     }
     
@@ -1186,6 +1187,8 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
         linker_line.add(line, get_string_length(line));
     }
 
+    linker_line.add(0);
+    
     double rsc_end_time = os_get_time();
     double rsc_time = rsc_end_time - rsc_start_time;
 

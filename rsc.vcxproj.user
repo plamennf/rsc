@@ -3,11 +3,11 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LocalDebuggerCommandArguments>build.rsc -configuration:Debug</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerWorkingDirectory>D:\Programming\Dev\Everlong</LocalDebuggerWorkingDirectory>
+    <LocalDebuggerWorkingDirectory>D:\Programming\Dev\swordsmangame</LocalDebuggerWorkingDirectory>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LocalDebuggerCommandArguments>build.rsc -configuration:Debug</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerWorkingDirectory>D:\Programming\Dev\Everlong</LocalDebuggerWorkingDirectory>
+    <LocalDebuggerWorkingDirectory>D:\Programming\Dev\swordsmangame</LocalDebuggerWorkingDirectory>
   </PropertyGroup>
 </Project>

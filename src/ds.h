@@ -8,123 +8,180 @@
 
 inline Memory_Arena array_arena;
 
+#pragma once
+
+#include "general.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+template <typename Array>
+struct Array_Iterator {
+    using Value_Type = typename Array::Value_Type;
+    using Pointer_Type = Value_Type *;
+    using Reference_Type = Value_Type &;
+    
+    inline Array_Iterator(Pointer_Type ptr) {
+        this->ptr = ptr;
+    }
+
+    inline Array_Iterator &operator++() {
+        ptr++;
+        return *this;
+    }
+    
+    inline Array_Iterator operator++(int) {
+        Array_Iterator iterator = *this;
+        ++(*this);
+        return iterator;
+    }
+    
+    inline Array_Iterator &operator--() {
+        ptr--;
+        return *this;
+    }
+    
+    inline Array_Iterator operator--(int) {
+        Array_Iterator iterator = *this;
+        --(*this);
+        return iterator;        
+    }
+
+    inline Reference_Type operator[](int index) {
+        return *(ptr + index);
+    }
+    
+    inline Pointer_Type operator->() {
+        return ptr;
+    }
+    
+    inline Reference_Type operator*() {
+        return *ptr;
+    }
+
+    inline bool operator==(Array_Iterator const &other) const {
+        return ptr == other.ptr;
+    }
+    
+    inline bool operator!=(Array_Iterator const &other) const {
+        return !(*this == other);
+    }
+    
+    Pointer_Type ptr;
+};
+
 template <typename T>
 struct Array {
+    using Value_Type = T;
+    using Iterator = Array_Iterator<Array<T>>;
+    
     T *data = NULL;
-    s64 count = 0;
-    s64 allocated = 0;
-    
-    inline void reserve(s64 newSize) {
-        if (newSize > allocated) {
-            resize(newSize);
+    int allocated = 0;
+    int count = 0;
+    bool use_temporary_storage = false;
+
+    ~Array();
+
+    void reserve(int size);
+    void resize(int size);
+    void add(T const &item);
+    int find(T const &item);
+    void ordered_remove_by_index(int n);
+
+    inline void add(T *items, int item_count) {
+        reserve(count + item_count);
+        for (int i = count; i < count + item_count; i++) {
+            data[i] = items[i - count];
         }
-    }
-    
-    inline ~Array() {
-        /*
-        if (data && !use_temporary_storage) {
-            ::operator delete(data, allocated * sizeof(T));
-        }
-        */
-    }
-    
-    inline void add(const T& value) {
-        if (count >= allocated) {
-            if (!allocated) {
-                allocated = 16;
-            }
-            resize(allocated * 2);
-        }
-        
-        data[count] = value;
-        count++;
+        count += item_count;
     }
 
-    inline void add(T *values, s64 num_values) {
-        for (s64 i = 0; i < num_values; i++) {
-            add(values[i]);
-        }
-    }
-    
-    inline T *add() {
-        if (count >= allocated) {
-            if (!allocated) {
-                allocated = 16;
-            }
-            resize(allocated * 2);
-        }
-
-        T tmp = {};
-        data[count] = tmp;
-        T *result = &data[count++];
-        return result;
-    }
-    
-    inline void resize(s64 newSize) {
-        T *new_block = (T *)array_arena.push(newSize * sizeof(T));
-        
-        if (newSize < count) {
-            count = newSize;
-        }
-        
-        for (s64 i = 0; i < count; i++) {
-            new_block[i] = data[i];
-        }
-        
-        data = new_block;
-        allocated = newSize;
-    }
-
-    inline void remove_nth(s64 index) {
-        for (s64 i = index; i < count-1; i++) {
-            data[i] = data[i+1];
-        }
-        count--;
-    }
-
-    inline s64 find(T const &value) {
-        for (s64 i = 0; i < count; i++) {
-            if (data[i] == value) {
-                return i;
-            }
-        }
-        return -1;
-    }
-    
     inline T *copy_to_array() {
         T *result = new T[count];
         memcpy(result, data, count * sizeof(T));
         return result;
     }
     
-    inline const T &get(s64 index) const {
-        assert(index >= 0);
-        assert(index < count);
-        
-        return data[index];
+    T const &operator[](int index) const;
+    T &operator[](int index);
+
+    inline Iterator begin() { return data; }
+    inline Iterator end() { return data + count; }
+};
+
+template <typename T>
+inline Array <T>::~Array() {
+    if (data && !use_temporary_storage) {
+        free(data);
+    }
+}
+
+template <typename T>
+inline void Array <T>::reserve(int size) {
+    if (allocated >= size) return;
+
+    int new_allocated = Max(allocated, size);
+    new_allocated = Max(new_allocated, 32);
+
+    int new_bytes = new_allocated * sizeof(T);
+    int old_bytes = allocated * sizeof(T);
+
+    void *new_data = use_temporary_storage ? talloc(new_bytes) : malloc(new_bytes);
+    if (data) {
+        memcpy(new_data, data, old_bytes);
     }
 
-    inline T &get(s64 index) {
-        assert(index >= 0);
-        assert(index < count);
-        
-        return data[index];
+    if (!use_temporary_storage) {
+        free(data);
     }
-    
-    inline const T &operator[](s64 index) const {
-        assert(index >= 0);
-        assert(index < count);
-        
-        return data[index];
+
+    data = (T *)new_data;
+
+    allocated = new_allocated;
+}
+
+template <typename T>
+inline void Array <T>::resize(int size) {
+    reserve(size);
+    count = size;
+}
+
+template <typename T>
+inline void Array <T>::add(T const &item) {
+    reserve(count+1);
+    data[count] = item;
+    count++;
+}
+
+template <typename T>
+inline int Array <T>::find(T const &item) {
+    for (int i = 0; i < count; i++) {
+        if (data[i] == item) return i;
     }
-    
-    inline T &operator[](s64 index) {
-        assert(index >= 0);
-        assert(index < count);
-        
-        return data[index];
+    return -1;
+}
+
+template <typename T>
+inline void Array <T>::ordered_remove_by_index(int n) {
+    for (int i = n; i < count-1; i++) {
+        data[i] = data[i+1];
     }
-};
+    count--;
+}
+
+template <typename T>
+inline T const &Array <T>::operator[](int index) const {
+    assert(index >= 0);
+    assert(index < count);
+    return data[index];
+}
+
+template <typename T>
+inline T &Array <T>::operator[](int index) {
+    assert(index >= 0);
+    assert(index < count);
+    return data[index];    
+}
 
 inline int hash(int x) {
     x = ((x >> 16) ^ x) * 0x45d9f3b;
