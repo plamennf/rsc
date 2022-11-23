@@ -1,15 +1,5 @@
 #pragma once
 
-#include <assert.h>
-#include <stdlib.h>
-#include <string.h>
-
-#include "general.h"
-
-inline Memory_Arena array_arena;
-
-#pragma once
-
 #include "general.h"
 
 #include <stdlib.h>
@@ -78,7 +68,6 @@ struct Array {
     T *data = NULL;
     int allocated = 0;
     int count = 0;
-    bool use_temporary_storage = false;
 
     ~Array();
 
@@ -111,7 +100,7 @@ struct Array {
 
 template <typename T>
 inline Array <T>::~Array() {
-    if (data && !use_temporary_storage) {
+    if (data) {
         free(data);
     }
 }
@@ -126,12 +115,12 @@ inline void Array <T>::reserve(int size) {
     int new_bytes = new_allocated * sizeof(T);
     int old_bytes = allocated * sizeof(T);
 
-    void *new_data = use_temporary_storage ? talloc(new_bytes) : malloc(new_bytes);
+    void *new_data = malloc(new_bytes);
     if (data) {
         memcpy(new_data, data, old_bytes);
     }
 
-    if (!use_temporary_storage) {
+    if (data) {
         free(data);
     }
 

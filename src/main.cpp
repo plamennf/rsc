@@ -1145,8 +1145,10 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
         char *line = sprint("%s ", lib);
         linker_line.add(line, get_string_length(line));
     }
-    
-    project->cfiles.add(pchsource);
+
+    if (pchsource) {
+        project->cfiles.add(pchsource);
+    }
     for (int i = 0; i < project->cfiles.count; i++) {
         char *filename = project->cfiles[i];
 
@@ -1155,8 +1157,12 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
         char *slash = strrchr(dir_with_name, '/');
         
         Array <char> name;
-        for (char *at = slash + 1; *at; at++) {
-            name.add(*at);
+        if (slash) {
+            for (char *at = slash + 1; *at; at++) {
+                name.add(*at);
+            }
+        } else {
+            name.add(dir_with_name, get_string_length(dir_with_name));
         }
         name.add(0);
         
