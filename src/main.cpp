@@ -1122,30 +1122,13 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
 
     Array <char> linker_line;
     {
-        char *line = "link /nologo ";
+        char *line = "link /nologo /MACHINE:X64 ";
         if (project->type == OUTPUT_STATIC_LIB) {
-            line = "lib /nologo ";
+            line = "lib /nologo /MACHINE:X64 ";
         }
         linker_line.add(line, get_string_length(line));
     }
-
-    for (int i = 0; i < libdirs.count; i++) {
-        char *dir = libdirs[i];
-        replace_forwardslash_with_backslash(dir);
-
-        dir = do_macro_substitutions(dir, project, configuration); // @Leak
-        
-        char *line = sprint("/LIBPATH:\"%s\" ", dir);
-        linker_line.add(line, get_string_length(line));
-    }
-
-    for (int i = 0; i < libs.count; i++) {
-        char *lib = libs[i];
-        replace_forwardslash_with_backslash(lib);
-        char *line = sprint("%s ", lib);
-        linker_line.add(line, get_string_length(line));
-    }
-
+    
     if (pchsource) {
         project->cfiles.add(pchsource);
     }
@@ -1167,6 +1150,23 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
         name.add(0);
         
         char *line = sprint("%s\\%s.obj ", objdir, name.data);
+        linker_line.add(line, get_string_length(line));
+    }
+    
+    for (int i = 0; i < libs.count; i++) {
+        char *lib = libs[i];
+        replace_forwardslash_with_backslash(lib);
+        char *line = sprint("%s ", lib);
+        linker_line.add(line, get_string_length(line));
+    }
+
+    for (int i = 0; i < libdirs.count; i++) {
+        char *dir = libdirs[i];
+        replace_forwardslash_with_backslash(dir);
+
+        dir = do_macro_substitutions(dir, project, configuration); // @Leak
+        
+        char *line = sprint("/LIBPATH:\"%s\" ", dir);
         linker_line.add(line, get_string_length(line));
     }
     
