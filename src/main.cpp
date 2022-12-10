@@ -1140,7 +1140,7 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
     }
     
     if (pchsource) {
-        //project->cfiles.add(pchsource);
+        project->cfiles.add(pchsource);
     }
     for (int i = 0; i < project->cfiles.count; i++) {
         char *filename = project->cfiles[i];
