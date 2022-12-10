@@ -942,7 +942,7 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
     Array <char> compiler_line;
 
     {
-        char *line = "cl /c /nologo /W3 /diagnostics:column /WL /FC /Oi /EHsc /Zc:strictStrings- /std:c++17 /D_CRT_SECURE_NO_WARNINGS ";
+        char *line = "cl /c /nologo /W3 /diagnostics:column /WL /FC /Oi /EHsc /Zc:strictStrings- /std:c++20 /Zc:strictStrings- /D_CRT_SECURE_NO_WARNINGS ";
         compiler_line.add(line, get_string_length(line));
     }
     bool debug_symbols = project->debug_symbols;
@@ -992,71 +992,7 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
         exit(1);
     }
 
-    if (pchsource && pchheader) {
-        char *_pchname = copy_string(pchsource); // @LeakMaybe
-        char *slash = strrchr(_pchname, '\\');
-        slash += 1;
-        char *dot = strrchr(slash, '.');
-        if (dot) {
-            slash[dot - slash] = 0;
-        }
-        // @Speed
-        char *pchname = new char[get_string_length(slash) + 4];
-        memcpy(pchname, slash, get_string_length(slash));
-        memcpy(pchname + get_string_length(slash), ".pch", 4);
-
-        Array <char> pch_line;
-        
-        char *line = sprint("cl /c /Yc\"%s\" /nologo /Fo\"%s\\\\\" /Fd\"%s\\\\\" /W3 /diagnostics:column /WL /FC /Oi /EHsc /Zc:strictStrings- /std:c++17 /D_CRT_SECURE_NO_WARNINGS %s ", pchheader, objdir, outputdir, pchsource);
-        pch_line.add(line, get_string_length(line));
-
-        if (static_runtime) {
-            pch_line.add('/');
-            pch_line.add('M');
-            pch_line.add('T');
-        } else {
-            pch_line.add('/');
-            pch_line.add('M');
-            pch_line.add('D');
-        }
-
-        if (runtime_type == RUNTIME_DEBUG) {
-            pch_line.add('d');
-        }
-
-        pch_line.add(' ');
-        
-        if (optimize) {
-            line = "/O2 /Ob2 ";
-            pch_line.add(line, get_string_length(line));
-        } else {
-            line = "/Od /Ob0 ";
-            pch_line.add(line, get_string_length(line));
-        }
-
-        if (debug_symbols) {
-            line = "/Zi /DEBUG ";
-            pch_line.add(line, get_string_length(line));
-        }
-
-        pch_line.add(0);
-        system(pch_line.data);
-  
-        line = sprint("/Yu\"%s\" ", pchheader);
-        compiler_line.add(line, get_string_length(line));
-    }
-    
-    {
-        char *line = sprint("/Fo\"%s\\\\\" ", objdir);
-        compiler_line.add(line, get_string_length(line));
-    }
-
-    {
-        char *line = sprint("/Fd\"%s\\\\\" ", outputdir); // Make the .pdb file go into the output directory
-        compiler_line.add(line, get_string_length(line));
-    }
-
-    Array <char *> includedirs;
+        Array <char *> includedirs;
     for (int i = 0; i < project->includedirs.count; i++) {
         char *dir = project->includedirs[i];
         includedirs.add(dir);
@@ -1105,6 +1041,80 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
         char *line = sprint("/I %s ", dir);
         compiler_line.add(line, get_string_length(line));
     }
+
+    if (pchsource && pchheader) {
+        char *_pchname = copy_string(pchsource); // @LeakMaybe
+        char *slash = strrchr(_pchname, '\\');
+        slash += 1;
+        char *dot = strrchr(slash, '.');
+        if (dot) {
+            slash[dot - slash] = 0;
+        }
+        // @Speed
+        char *pchname = new char[get_string_length(slash) + 4];
+        memcpy(pchname, slash, get_string_length(slash));
+        memcpy(pchname + get_string_length(slash), ".pch", 4);
+
+        Array <char> pch_line;
+        
+        char *line = sprint("cl /c /Yc\"%s\" /nologo /Fo\"%s\\\\\" /Fd\"%s\\\\\" /W3 /diagnostics:column /WL /FC /Oi /EHsc /Zc:strictStrings- /std:c++20 /D_CRT_SECURE_NO_WARNINGS %s ", pchheader, objdir, outputdir, pchsource);
+        pch_line.add(line, get_string_length(line));
+
+        for (int i = 0; i < includedirs.count; i++) {
+            char *dir = includedirs[i];
+            replace_forwardslash_with_backslash(dir);
+        
+            dir = do_macro_substitutions(dir, project, configuration); // @Leak
+        
+            char *line = sprint("/I %s ", dir);
+            pch_line.add(line, get_string_length(line));
+        }
+        
+        if (static_runtime) {
+            pch_line.add('/');
+            pch_line.add('M');
+            pch_line.add('T');
+        } else {
+            pch_line.add('/');
+            pch_line.add('M');
+            pch_line.add('D');
+        }
+
+        if (runtime_type == RUNTIME_DEBUG) {
+            pch_line.add('d');
+        }
+
+        pch_line.add(' ');
+        
+        if (optimize) {
+            line = "/O2 /Ob2 ";
+            pch_line.add(line, get_string_length(line));
+        } else {
+            line = "/Od /Ob0 ";
+            pch_line.add(line, get_string_length(line));
+        }
+
+        if (debug_symbols) {
+            line = "/Zi /DEBUG ";
+            pch_line.add(line, get_string_length(line));
+        }
+
+        pch_line.add(0);
+        system(pch_line.data);
+  
+        line = sprint("/Yu\"%s\" ", pchheader);
+        compiler_line.add(line, get_string_length(line));
+    }
+    
+    {
+        char *line = sprint("/Fo\"%s\\\\\" ", objdir);
+        compiler_line.add(line, get_string_length(line));
+    }
+
+    {
+        char *line = sprint("/Fd\"%s\\\\\" ", outputdir); // Make the .pdb file go into the output directory
+        compiler_line.add(line, get_string_length(line));
+    }
     
     for (int i = 0; i < files_to_compile.count; i++) {
         char *filename = files_to_compile[i];
@@ -1130,7 +1140,7 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
     }
     
     if (pchsource) {
-        project->cfiles.add(pchsource);
+        //project->cfiles.add(pchsource);
     }
     for (int i = 0; i < project->cfiles.count; i++) {
         char *filename = project->cfiles[i];
