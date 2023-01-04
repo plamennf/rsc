@@ -992,7 +992,7 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
         exit(1);
     }
 
-        Array <char *> includedirs;
+    Array <char *> includedirs;
     for (int i = 0; i < project->includedirs.count; i++) {
         char *dir = project->includedirs[i];
         includedirs.add(dir);
@@ -1042,6 +1042,22 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
         compiler_line.add(line, get_string_length(line));
     }
 
+    {
+        char *line = sprint("/Fo\"%s\\\\\" ", objdir);
+        compiler_line.add(line, get_string_length(line));
+    }
+
+    {
+        char *line = sprint("/Fd\"%s\\\\\" ", outputdir); // Make the .pdb file go into the output directory
+        compiler_line.add(line, get_string_length(line));
+    }
+
+    for (int i = 0; i < defines.count; i++) {
+        char *define = defines[i];
+        char *line = sprint("/D%s ", define);
+        compiler_line.add(line, get_string_length(line));
+    }
+
     if (pchsource && pchheader) {
         char *_pchname = copy_string(pchsource); // @LeakMaybe
         char *slash = strrchr(_pchname, '\\');
@@ -1056,10 +1072,17 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
         memcpy(pchname + get_string_length(slash), ".pch", 4);
 
         Array <char> pch_line;
+        pch_line.data = compiler_line.copy_to_array();
+        pch_line.count = compiler_line.count;
+        pch_line.allocated = compiler_line.allocated;
+
+        char *line = sprint("/Yc\"%s\" %s ", pchheader, pchsource);
+        pch_line.add(line, get_string_length(line));
         
+#if 0
         char *line = sprint("cl /c /Yc\"%s\" /nologo /Fo\"%s\\\\\" /Fd\"%s\\\\\" /W3 /diagnostics:column /WL /FC /Oi /EHsc /Zc:strictStrings- /std:c++20 /D_CRT_SECURE_NO_WARNINGS %s ", pchheader, objdir, outputdir, pchsource);
         pch_line.add(line, get_string_length(line));
-
+        
         for (int i = 0; i < includedirs.count; i++) {
             char *dir = includedirs[i];
             replace_forwardslash_with_backslash(dir);
@@ -1098,21 +1121,12 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
             line = "/Zi /DEBUG ";
             pch_line.add(line, get_string_length(line));
         }
-
+#endif
+        
         pch_line.add(0);
         system(pch_line.data);
   
         line = sprint("/Yu\"%s\" ", pchheader);
-        compiler_line.add(line, get_string_length(line));
-    }
-    
-    {
-        char *line = sprint("/Fo\"%s\\\\\" ", objdir);
-        compiler_line.add(line, get_string_length(line));
-    }
-
-    {
-        char *line = sprint("/Fd\"%s\\\\\" ", outputdir); // Make the .pdb file go into the output directory
         compiler_line.add(line, get_string_length(line));
     }
     
@@ -1121,13 +1135,7 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
         compiler_line.add(filename, get_string_length(filename));
         compiler_line.add(' ');
     }
-
-    for (int i = 0; i < defines.count; i++) {
-        char *define = defines[i];
-        char *line = sprint("/D%s ", define);
-        compiler_line.add(line, get_string_length(line));
-    }
-
+    
     compiler_line.add(0);
 
     Array <char> linker_line;
