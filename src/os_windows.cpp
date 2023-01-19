@@ -11,7 +11,7 @@ wchar_t *utf8_to_wstring(char *string) {
     if (!required_size) return nullptr;
 
     wchar_t *result = static_cast <wchar_t *>(talloc((required_size + 1) * sizeof(wchar_t)));
-    
+
     MultiByteToWideChar(CP_UTF8, 0, string, -1, result, required_size);
     
     return result;
