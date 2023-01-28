@@ -14,4 +14,4 @@ void os_setcwd(char *dir);
 void os_init_colors_and_utf8();
 
 bool os_directory_exists(char *dir);
-bool os_make_directory_if_not_exist(char *dir);
+void os_make_directory_if_not_exist(char *dir);

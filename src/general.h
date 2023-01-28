@@ -106,9 +106,8 @@ char *sprint_valist(char *fmt, va_list args);
 char *tprint(char *fmt, ...);
 char *tprint_valist(char *fmt, va_list args);
 
-s64 get_string_length(char *s);
-char *copy_string(char *s);
-char *temp_copy_string(char *s);
+int get_string_length(char *s);
+char *copy_string(char *s, bool use_temporary_storage = false);
 bool strings_match(char *a, char *b);
 int get_codepoint(char *text, int *bytes_processed);
 
@@ -118,7 +117,7 @@ char *consume_next_line(char **text_ptr);
 
 float fract(float value);
 
-char *temp_concatenate_with_commas(char **array, s64 array_count);
+char *temp_concatenate_with_commas(char **array, int array_count);
 
 void log(char *string, ...);
 void log_error(char *string, ...);

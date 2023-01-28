@@ -160,7 +160,7 @@ static Command_Line_Arguments parse_command_line_arguments(int argc, char **argv
         if (starts_with(arg, "-configuration:")) {
             arg += get_string_length("-configuration:");
             
-            result.configuration = temp_copy_string(arg);
+            result.configuration = copy_string(arg, true);
         } else if (strings_match(arg, "-B")) {
             result.rebuild_all = true;
         } else {
@@ -168,7 +168,7 @@ static Command_Line_Arguments parse_command_line_arguments(int argc, char **argv
                 log("ERROR: More than one .rsc files have been provided.\n");
                 continue;
             }
-            result.rsc_file = temp_copy_string(arg);
+            result.rsc_file = copy_string(arg, true);
         }
     }
     
@@ -225,8 +225,8 @@ void Rsc_Data::parse_file(char *filepath) {
             line = eat_spaces(line);
 
             Rsc_Project *project = new Rsc_Project();//GetStruct(Rsc_Project);
-            project->name = temp_copy_string(line);
-            project->lowercased_name = temp_copy_string(lowercase(line));
+            project->name = copy_string(line, true);
+            project->lowercased_name = copy_string(lowercase(line), true);
             projects.add(project);
             
             current_project = project;
@@ -392,9 +392,9 @@ void Rsc_Data::parse_file(char *filepath) {
             outputdir_string.add(0);
 
             if (is_in_configuration_filter && current_configuration) {
-                current_configuration->outputdir = temp_copy_string(outputdir_string.data);
+                current_configuration->outputdir = copy_string(outputdir_string.data, true);
             } else {
-                current_project->outputdir = temp_copy_string(outputdir_string.data);
+                current_project->outputdir = copy_string(outputdir_string.data, true);
             }
         } else if (starts_with(line, "objdir")) {
             if (!is_in_project) {
@@ -429,9 +429,9 @@ void Rsc_Data::parse_file(char *filepath) {
             objdir_string.add(0);
 
             if (is_in_configuration_filter && current_configuration) {
-                current_configuration->objdir = temp_copy_string(objdir_string.data);
+                current_configuration->objdir = copy_string(objdir_string.data, true);
             } else {
-                current_project->objdir = temp_copy_string(objdir_string.data);
+                current_project->objdir = copy_string(objdir_string.data, true);
             }
         } else if (starts_with(line, "outputname")) {
             if (!is_in_project) {
@@ -466,9 +466,9 @@ void Rsc_Data::parse_file(char *filepath) {
             outputname_string.add(0);
             
             if (is_in_configuration_filter && current_configuration) {
-                current_configuration->outputname = temp_copy_string(outputname_string.data);
+                current_configuration->outputname = copy_string(outputname_string.data, true);
             } else {
-                current_project->outputname = temp_copy_string(outputname_string.data);
+                current_project->outputname = copy_string(outputname_string.data, true);
             }
         } else if (starts_with(line, "cfiles")) {
             is_in_cfiles = true;
@@ -693,8 +693,8 @@ void Rsc_Data::parse_file(char *filepath) {
         } else {
             if (is_in_configurations) {
                 Configuration *configuration = new Configuration();
-                configuration->name = temp_copy_string(line);
-                configuration->lowercased_name = temp_copy_string(lowercase(line));
+                configuration->name = copy_string(line, true);
+                configuration->lowercased_name = copy_string(lowercase(line), true);
                 
                 configurations.add(configuration);
             } else if (is_in_cfiles) {
@@ -711,7 +711,7 @@ void Rsc_Data::parse_file(char *filepath) {
                     exit(1);
                 }
                 
-                current_project->cfiles.add(temp_copy_string(line));
+                current_project->cfiles.add(copy_string(line, true));
             } else if (is_in_includedirs) {
                 if (line[0] == '{') line++;
                 line = eat_spaces(line);
@@ -727,9 +727,9 @@ void Rsc_Data::parse_file(char *filepath) {
                 }
 
                 if (is_in_configuration_filter && current_configuration) {
-                    current_configuration->includedirs.add(temp_copy_string(line));
+                    current_configuration->includedirs.add(copy_string(line, true));
                 } else {
-                    current_project->includedirs.add(temp_copy_string(line));
+                    current_project->includedirs.add(copy_string(line, true));
                 }
             } else if (is_in_libdirs) {
                 if (line[0] == '{') line++;
@@ -746,9 +746,9 @@ void Rsc_Data::parse_file(char *filepath) {
                 }
 
                 if (is_in_configuration_filter && current_configuration) {
-                    current_configuration->libdirs.add(temp_copy_string(line));
+                    current_configuration->libdirs.add(copy_string(line, true));
                 } else {
-                    current_project->libdirs.add(temp_copy_string(line));
+                    current_project->libdirs.add(copy_string(line, true));
                 }
             } else if (is_in_libs) {
                 if (line[0] == '{') line++;
@@ -765,9 +765,9 @@ void Rsc_Data::parse_file(char *filepath) {
                 }
 
                 if (is_in_configuration_filter && current_configuration) {
-                    current_configuration->libs.add(temp_copy_string(line));
+                    current_configuration->libs.add(copy_string(line, true));
                 } else {
-                    current_project->libs.add(temp_copy_string(line));
+                    current_project->libs.add(copy_string(line, true));
                 }
             } else if (is_in_defines) {
                 if (line[0] == '{') line++;
@@ -784,9 +784,9 @@ void Rsc_Data::parse_file(char *filepath) {
                 }
 
                 if (is_in_configuration_filter && current_configuration) {
-                    current_configuration->defines.add(temp_copy_string(line));
+                    current_configuration->defines.add(copy_string(line, true));
                 } else {
-                    current_project->defines.add(temp_copy_string(line));
+                    current_project->defines.add(copy_string(line, true));
                 }
             }
         }
@@ -796,7 +796,7 @@ void Rsc_Data::parse_file(char *filepath) {
 static char *get_directory_from_filename(char *string) {
     if (!string) return NULL;
 
-    char *result = temp_copy_string(string);
+    char *result = copy_string(string, true);
     
     char *slash = strrchr(result, '/');
     result[slash - result] = 0;
@@ -1280,7 +1280,7 @@ int main(int argc, char **argv) {
     for (int i = 0; i < data->configurations.count; i++) {
         Configuration *cfg = data->configurations[i];
 
-        char *cfg_name = temp_copy_string(args.configuration);
+        char *cfg_name = copy_string(args.configuration, true);
         lowercase(cfg_name);
         
         if (strings_match(cfg->lowercased_name, cfg_name)) {

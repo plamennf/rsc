@@ -129,18 +129,16 @@ char *tprint_valist(char *fmt, va_list args) {
     return str;
 }
 
-char *copy_string(char *s) {
+char *copy_string(char *s, bool use_temporary_storage) {
     auto len = get_string_length(s);
-    char *result = new char[len + 1];
+    char *result;
+    if (use_temporary_storage) {
+        result = (char *)talloc(len + 1);
+    } else {
+        result = new char[len + 1];
+    }
     memcpy(result, s, len + 1);
     return result;
-}
-
-char *temp_copy_string(char *s) {
-    auto len = get_string_length(s);
-    char *result = static_cast <char *>(talloc(len + 1));
-    memcpy(result, s, len + 1);
-    return result;    
 }
 
 bool strings_match(char *a, char *b) {
@@ -283,12 +281,12 @@ float fract(float value) {
     return fractpart;
 }
 
-char *temp_concatenate_with_commas(char **array, s64 array_count) {
+char *temp_concatenate_with_commas(char **array, int array_count) {
     Array <char> result;
 
     {
-        s64 to_reserve = 1; // For zero-termination
-        for (s64 i = 0; i < array_count; i++) {
+        int to_reserve = 1; // For zero-termination
+        for (int i = 0; i < array_count; i++) {
             char *s = array[i];
             to_reserve += get_string_length(s);
             if (i != array_count-1) to_reserve += 2; // For a comma and a space
@@ -296,7 +294,7 @@ char *temp_concatenate_with_commas(char **array, s64 array_count) {
         result.reserve(to_reserve);
     }
 
-    for (s64 i = 0; i < array_count; i++) {
+    for (int i = 0; i < array_count; i++) {
         char *s = array[i];
         for (char *at = s; *at; at++) {
             result.add(*at);
@@ -311,10 +309,10 @@ char *temp_concatenate_with_commas(char **array, s64 array_count) {
     return result.data;
 }
 
-s64 get_string_length(char *s) {
+int get_string_length(char *s) {
     if (!s) return 0;
 
-    s64 length = 0;
+    int length = 0;
     while (*s++) {
         length++;
     }
@@ -428,7 +426,7 @@ char *lowercase(char *string) {
 char *temp_copy_strip_extension(char *filename) {
     if (!filename) return NULL;
 
-    char *result = temp_copy_string(filename);
+    char *result = copy_string(filename, true);
     char *dot = strrchr(result, '.');
     result[dot - result] = 0;
     return result;

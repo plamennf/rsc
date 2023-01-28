@@ -2,6 +2,7 @@
 
 #include "os.h"
 #include "general.h"
+#include "ds.h"
 
 #include <windows.h>
 #include <string.h> // For memset
@@ -85,7 +86,7 @@ void os_setcwd(char *_dir) {
     s64 mark = get_temporary_storage_mark();
     defer { set_temporary_storage_mark(mark); };
     
-    char *dir = temp_copy_string(_dir);
+    char *dir = copy_string(_dir, true);
     
     for (char *at = dir; *at; at++) {
         if (at[0] == '/') {
@@ -127,21 +128,51 @@ bool os_directory_exists(char *dir) {
             (attrib & FILE_ATTRIBUTE_DIRECTORY));
 }
 
-bool os_make_directory_if_not_exist(char *dir) {
-    if (os_directory_exists(dir)) return false;
+static void split_directory_into_source_directories(char *dir, Array <char *> &dirs, bool use_temporary_storage = true) {
+    char *at = dir;
+    while (true) {
+        char *end = strchr(at, '\\');
+        if (!end) {
+            dirs.add(copy_string(at, use_temporary_storage));
+            break;
+        }
+        
+        char *s = copy_string(dir, use_temporary_storage);
+        s[end - dir] = 0;
 
-    s64 mark = get_temporary_storage_mark();
-    defer { set_temporary_storage_mark(mark); };
-    
-    wchar_t *wide_filepath = utf8_to_wstring(dir);
-    for (wchar_t *at = wide_filepath; *at; at++) {
-        if (*at == L'/') {
-            *at = L'\\';
+        dirs.add(s);
+
+        end++;
+        at = end;
+    }
+}
+
+void os_make_directory_if_not_exist(char *dir) {
+    if (os_directory_exists(dir)) return;
+
+    for (char *at = dir; *at; *at++) {
+        if (*at == '/') {
+            *at = '\\';
         }
     }
     
-    BOOL result = CreateDirectoryW(wide_filepath, NULL);
-    return result;
+    s64 mark = get_temporary_storage_mark();
+    defer { set_temporary_storage_mark(mark); };
+
+    Array <char *> dirs;
+    dirs.use_temporary_storage = true;
+    split_directory_into_source_directories(dir, dirs);
+
+    for (char *d : dirs) {
+        wchar_t *wide_filepath = utf8_to_wstring(d);
+        for (wchar_t *at = wide_filepath; *at; at++) {
+            if (*at == L'/') {
+                *at = L'\\';
+            }
+        }
+        
+        CreateDirectoryW(wide_filepath, NULL);
+    }
 }
 
 void os_get_last_write_time(char *file_path, u64 *out_time) {
