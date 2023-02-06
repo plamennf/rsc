@@ -81,7 +81,7 @@ struct Rsc_Project {
     Runtime_Type runtime_type = RUNTIME_DEBUG;
     
     Array <char *> cfiles;
-
+    
     char *pchheader = NULL;
     char *pchsource = NULL;
 };
@@ -89,7 +89,7 @@ struct Rsc_Project {
 struct Rsc_Data {
     bool should_rebuild_all;
     
-    Array <Configuration *> configurations;
+    Array <Configuration *> configuration_names;
     Array <Rsc_Project *> projects;
 
     void parse_file(char *filepath);
@@ -184,7 +184,7 @@ static void print_usage() {
 void Rsc_Data::parse_file(char *filepath) {
     Text_File_Handler handler;
     handler.start_file(filepath, filepath, "rsc");
-
+    
     bool is_in_configurations = false;
     Rsc_Project *current_project = NULL;
     bool is_in_project = false;
@@ -227,9 +227,16 @@ void Rsc_Data::parse_file(char *filepath) {
             Rsc_Project *project = new Rsc_Project();//GetStruct(Rsc_Project);
             project->name = copy_string(line, true);
             project->lowercased_name = copy_string(lowercase(line), true);
+            project->configurations.reserve(configuration_names.count);
+            for (int i = 0; i < configuration_names.count; i++) {
+                Configuration *cfg = new Configuration();
+                memcpy(cfg, configuration_names[i], sizeof(Configuration));
+                project->configurations.add(cfg);
+            }
             projects.add(project);
             
             current_project = project;
+            current_configuration = nullptr;
         } else if (starts_with(line, "type")) {
             if (!is_in_project) {
                 handler.report_error("type can only be set for project.");
@@ -658,16 +665,17 @@ void Rsc_Data::parse_file(char *filepath) {
 
                 lowercase(filter);
 
-                for (int i = 0; i < configurations.count; i++) {
-                    Configuration *cfg = configurations[i];
-                    if (strings_match(cfg->lowercased_name, filter)) {
+                for (int j = 0; j < current_project->configurations.count; j++) {
+                    auto cfg = current_project->configurations[j];
+                    if (strings_match(filter, cfg->lowercased_name)) {
                         current_configuration = cfg;
+                        break;
                     }
                 }
-                if (!current_configuration) {
-                    handler.report_error("configuration wanted for filter does not exist");
-                    exit(1);
-                }
+            }
+            if (!current_configuration) {
+                handler.report_error("configuration wanted for filter does not exist");
+                exit(1);
             }
         } else if (starts_with(line, "includedirs")) {
             is_in_cfiles = false;
@@ -696,7 +704,7 @@ void Rsc_Data::parse_file(char *filepath) {
                 configuration->name = copy_string(line, true);
                 configuration->lowercased_name = copy_string(lowercase(line), true);
                 
-                configurations.add(configuration);
+                configuration_names.add(configuration);
             } else if (is_in_cfiles) {
                 if (line[0] == '{') line++;
                 line = eat_spaces(line);
@@ -1219,20 +1227,24 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
     double cl_start_time = os_get_time();
     log("Compiler line: %s\n", compiler_line.data);
     int result = system(compiler_line.data);
+#ifndef _DEBUG
     if (result != 0) {
         os_delete_file(exepath);
         exit(1);
     }
+#endif
     double cl_end_time = os_get_time();
     double cl_time = cl_end_time - cl_start_time;
 
     double linker_start_time = os_get_time();
     log("Linker line: %s\n", linker_line.data);
     result = system(linker_line.data);
+#ifndef _DEBUG
     if (result != 0) {
         os_delete_file(exepath);
         exit(1);
     }
+#endif
     double linker_end_time = os_get_time();
     double linker_time = linker_end_time - linker_start_time;
 
@@ -1275,25 +1287,34 @@ int main(int argc, char **argv) {
     Rsc_Data *data = new Rsc_Data();
     data->should_rebuild_all = args.rebuild_all;
     data->parse_file(rsc_filepath);
-
-    Configuration *current_configuration = NULL;
-    for (int i = 0; i < data->configurations.count; i++) {
-        Configuration *cfg = data->configurations[i];
-
+    
+    char *current_configuration_name = NULL;
+    for (int i = 0; i < data->configuration_names.count; i++) {
+        Configuration *cfg = data->configuration_names[i];
+        
         char *cfg_name = copy_string(args.configuration, true);
         lowercase(cfg_name);
         
         if (strings_match(cfg->lowercased_name, cfg_name)) {
-            current_configuration = cfg;
+            current_configuration_name = cfg_name;
         }
     }
-    if (!current_configuration) {
+    if (!current_configuration_name) {
         log_error("ERROR: configuration passed to -configuration: isn't a valid configuration\n");
         exit(1);
     }
     
     for (int i = 0; i < data->projects.count; i++) {
         Rsc_Project *project = data->projects[i];
+
+        Configuration *current_configuration = NULL;
+        for (int j = 0; j < project->configurations.count; j++) {
+            Configuration *cfg = project->configurations[j];
+            if (strings_match(cfg->lowercased_name, current_configuration_name)) {
+                current_configuration = cfg;
+            }
+        }
+        
         execute_msvc_for_project(data, project, current_configuration, rsc_modtime);
     }
     
