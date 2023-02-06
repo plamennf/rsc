@@ -1,9 +1,9 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="Current" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <LocalDebuggerCommandArguments>test.rsc -configuration:Debug</LocalDebuggerCommandArguments>
+    <LocalDebuggerCommandArguments>build.rsc -configuration:Debug</LocalDebuggerCommandArguments>
     <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
-    <LocalDebuggerWorkingDirectory>D:\Programming\Dev\rsc\tests</LocalDebuggerWorkingDirectory>
+    <LocalDebuggerWorkingDirectory>D:\Programming\Dev\game</LocalDebuggerWorkingDirectory>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LocalDebuggerCommandArguments>build.rsc -configuration:Debug</LocalDebuggerCommandArguments>

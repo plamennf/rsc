@@ -133,7 +133,7 @@ static void split_directory_into_source_directories(char *dir, Array <char *> &d
     while (true) {
         char *end = strchr(at, '\\');
         if (!end) {
-            dirs.add(copy_string(at, use_temporary_storage));
+            dirs.add(copy_string(dir, use_temporary_storage));
             break;
         }
         
