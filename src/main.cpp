@@ -1067,18 +1067,9 @@ static void execute_msvc_for_project(Rsc_Data *data, Rsc_Project *project, Confi
     }
 
     if (pchsource && pchheader) {
-        char *_pchname = copy_string(pchsource); // @LeakMaybe
-        char *slash = strrchr(_pchname, '\\');
-        slash += 1;
-        char *dot = strrchr(slash, '.');
-        if (dot) {
-            slash[dot - slash] = 0;
-        }
-        // @Speed
-        char *pchname = new char[get_string_length(slash) + 4];
-        memcpy(pchname, slash, get_string_length(slash));
-        memcpy(pchname + get_string_length(slash), ".pch", 4);
-
+        char *pchname = sprint("/Fp%s\\%s.pch ", outputdir, project->name);
+        compiler_line.add(pchname, get_string_length(pchname));
+        
         Array <char> pch_line;
         pch_line.data = compiler_line.copy_to_array();
         pch_line.count = compiler_line.count;
