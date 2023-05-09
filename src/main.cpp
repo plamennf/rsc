@@ -39,7 +39,9 @@ static bool parseCommandLineArguments(int argc, char **argv) {
         return false;
     }
 
-    globalData.configurationNameToBuild = copyString(argv[2] + getStringLength("-configuration:"));
+    char *stringToCopy = argv[2];
+    stringToCopy += getStringLength("-configuration:");
+    globalData.configurationNameToBuild = copyString(stringToCopy);
     
     if (argc == 4) {
         if (stringsMatch(argv[3], "-B")) {
@@ -48,83 +50,6 @@ static bool parseCommandLineArguments(int argc, char **argv) {
     }
 
     return true;
-}
-
-static void printGlobalData() {
-    printf("configurations = {\n");
-    for (int i = 0; i < globalData.configurationNames.count; i++) {
-        printf("    \"%s\",\n", globalData.configurationNames[i]);
-    }
-    printf("};\n\n");
-
-    for (int i = 0; i < globalData.projects.count; i++) {
-        RscProject *project = globalData.projects[i];
-        printf("project '%s' {\n", project->name);
-
-        printf("    kind = '%d';\n", project->kind);
-        printf("    outputdir = '%s';\n", project->outputdir);
-        printf("    objdir = '%s';\n", project->objdir);
-        printf("    outputname = '%s';\n", project->outputname);
-
-        printf("    staticRuntime = '%d';\n", project->staticRuntime);
-
-        printf("    debugSymbols = '%d';\n", project->debugSymbols);
-        printf("    optimize = '%d';\n", project->optimize);
-        printf("    runtime = '%d';\n", project->runtimeType);
-        
-        printf("    files = {\n");
-        for (int j = 0; j < project->files.count; j++) {
-            printf("        \"%s\",\n", project->files[j]);
-        }
-        for (int j = 0; j < project->defines.count; j++) {
-            printf("        \"%s\",\n", project->defines[j]);
-        }
-        for (int j = 0; j < project->includeDirs.count; j++) {
-            printf("        \"%s\",\n", project->includeDirs[j]);
-        }
-        for (int j = 0; j < project->libDirs.count; j++) {
-            printf("        \"%s\",\n", project->libDirs[j]);
-        }
-        for (int j = 0; j < project->libs.count; j++) {
-            printf("        \"%s\",\n", project->libs[j]);
-        }
-        printf("    };\n");
-        
-        printf("}\n");
-
-        for (int j = 0; j < project->configurations.count; j++) {
-            RscConfiguration *cfg = project->configurations[j];
-            printf("configuration '%s' {\n", cfg->name);
-            printf("    kind = '%d';\n", cfg->kind);
-            printf("    outputdir = '%s';\n", cfg->outputdir);
-            printf("    objdir = '%s';\n", cfg->objdir);
-            printf("    outputname = '%s';\n", cfg->outputname);
-
-            printf("    debugSymbols = '%d';\n", cfg->debugSymbols);
-            printf("    optimize = '%d';\n", cfg->optimize);
-            printf("    runtime = '%d';\n", cfg->runtimeType);
-            
-            printf("    files = {\n");
-            for (int j = 0; j < cfg->files.count; j++) {
-                printf("        \"%s\",\n", cfg->files[j]);
-            }
-            for (int j = 0; j < cfg->defines.count; j++) {
-                printf("        \"%s\",\n", cfg->defines[j]);
-            }
-            for (int j = 0; j < cfg->includeDirs.count; j++) {
-                printf("        \"%s\",\n", cfg->includeDirs[j]);
-            }
-            for (int j = 0; j < cfg->libDirs.count; j++) {
-                printf("        \"%s\",\n", cfg->libDirs[j]);
-            }
-            for (int j = 0; j < cfg->libs.count; j++) {
-                printf("        \"%s\",\n", cfg->libs[j]);
-            }
-            printf("    };\n");
-            
-            printf("}\n");
-        }
-    }
 }
 
 int main(int argc, char **argv) {
@@ -141,8 +66,6 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // printGlobalData();
-
     u64 rscModtime = 0;
     os::getLastWriteTime(globalData.filename, &rscModtime);
 
@@ -150,7 +73,8 @@ int main(int argc, char **argv) {
     char *cfgName = copyStringLowercased(globalData.configurationNameToBuild);
     for (int i = 0; i < globalData.configurationNames.count; i++) {
         char *cfg = copyStringLowercased(globalData.configurationNames[i]);
-
+        defer { delete[] cfg; };
+        
         if (stringsMatch(cfg, cfgName)) {
             currentConfigurationName = cfgName;
             break;

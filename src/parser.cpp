@@ -324,6 +324,22 @@ static bool parseProject(Tokenizer *tokenizer, RscProject *project) {
                     return false;
                 }
             }
+        } else if (token.equals("pchheader")) {
+            if (!tokenizer->expectToken(&token, TokenType_Equals)) return false;
+            if (!tokenizer->expectToken(&token, TokenType_String)) return false;
+
+            if (currentConfiguration) currentConfiguration->pchheader = toCString(token);
+            else project->pchheader = toCString(token);
+
+            if (!tokenizer->expectToken(&token, TokenType_Semicolon)) return false;
+        } else if (token.equals("pchsource")) {
+            if (!tokenizer->expectToken(&token, TokenType_Equals)) return false;
+            if (!tokenizer->expectToken(&token, TokenType_String)) return false;
+
+            if (currentConfiguration) currentConfiguration->pchsource = toCString(token);
+            else project->pchsource = toCString(token);
+            
+            if (!tokenizer->expectToken(&token, TokenType_Semicolon)) return false;
         }
     }
     

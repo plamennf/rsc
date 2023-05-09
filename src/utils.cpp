@@ -157,7 +157,7 @@ char *mprintf_valist(char *fmt, va_list args) {
 void StringBuilder::copyFrom(StringBuilder *other) {
     buffer.data = other->buffer.copyToArray();
     buffer.count = other->buffer.count;
-    buffer.capacity = other->buffer.capacity;
+    buffer.capacity = other->buffer.count;
 }
 
 void StringBuilder::printf(char *fmt, ...) {
