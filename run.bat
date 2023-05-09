@@ -1,3 +1,3 @@
 @echo off
 
-build\rsc.exe test.rsc -configuration:Debug
+build\rsc.exe test.rsc -configuration:Debug -B

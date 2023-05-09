@@ -211,8 +211,13 @@ static bool parseProject(Tokenizer *tokenizer, RscProject *project) {
                 return false;
             }
             
-            if (currentConfiguration) currentConfiguration->staticRuntime = value;
-            else project->staticRuntime = value;
+            if (currentConfiguration) {
+                currentConfiguration->staticRuntime = value;
+                currentConfiguration->staticRuntime = true;
+            } else {
+                project->staticRuntime = value;
+                project->staticRuntime = true;
+            }
 
             if (!tokenizer->expectToken(&token, TokenType_Semicolon)) return false;
         } else if (token.equals("optimize")) {
@@ -229,8 +234,13 @@ static bool parseProject(Tokenizer *tokenizer, RscProject *project) {
                 return false;
             }
             
-            if (currentConfiguration) currentConfiguration->optimize = value;
-            else project->optimize = value;
+            if (currentConfiguration) {
+                currentConfiguration->optimize = value;
+                currentConfiguration->optimizeSet = true;
+            } else {
+                project->optimize = value;
+                project->optimizeSet = true;
+            }
 
             if (!tokenizer->expectToken(&token, TokenType_Semicolon)) return false;
         } else if (token.equals("debugSymbols")) {
@@ -247,8 +257,13 @@ static bool parseProject(Tokenizer *tokenizer, RscProject *project) {
                 return false;
             }
             
-            if (currentConfiguration) currentConfiguration->debugSymbols = value;
-            else project->debugSymbols = value;
+            if (currentConfiguration) {
+                currentConfiguration->debugSymbols = value;
+                currentConfiguration->debugSymbolsSet = true;
+            } else {
+                project->debugSymbols = value;
+                project->debugSymbolsSet = true;
+            }
 
             if (!tokenizer->expectToken(&token, TokenType_Semicolon)) return false;
         } else if (token.equals("runtime")) {

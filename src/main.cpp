@@ -32,8 +32,15 @@ static bool parseCommandLineArguments(int argc, char **argv) {
     }
 
     globalData.filename = copyString(argv[1]);
-    globalData.configurationNameToBuild = copyString(argv[2] + getStringLength("-configuration:"));
 
+    if (!startsWith(argv[2], "-configuration:")) {
+        fprintf(stderr, "Second parameter must start with -configuration:.\n");
+        printUsage();
+        return false;
+    }
+
+    globalData.configurationNameToBuild = copyString(argv[2] + getStringLength("-configuration:"));
+    
     if (argc == 4) {
         if (stringsMatch(argv[3], "-B")) {
             globalData.rebuild = true;
