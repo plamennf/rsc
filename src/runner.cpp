@@ -421,9 +421,47 @@ void executeMSVCForProject(RscProject *project, RscConfiguration *configuration,
         linkerLine.printf("/OUT:%s\\%s.%s ", outputdir, outputname, extension);
     }
 
+    char *resourceFile = project->resourceFile;
+    if (configuration->resourceFile) resourceFile = configuration->resourceFile;
+    
+    char *rcLine = NULL;
+    if (resourceFile) {
+        rcLine = mprintf("rc.exe %s\n", resourceFile);
+    }
+    
     double rscEndTime = os::getTime();
     double rscTime = rscEndTime - rscStartTime;
+    
+    double rcStartTime = os::getTime();
+    if (rcLine) {
+        printf("Resource-Compiler line: %s\n", rcLine);
+        int result = system(rcLine);
+//#ifndef _DEBUG
+        if (result != 0) {
+            exit(1);
+        }
 
+        char *filepathWithoutExtension = copyString(resourceFile);
+        char *t = strrchr(filepathWithoutExtension, '.');
+        if (t) {
+            filepathWithoutExtension[t - filepathWithoutExtension] = 0;
+        }
+        
+        char *srcFilepath = mprintf("%s.res", filepathWithoutExtension);
+        char *dstFilepath = mprintf("%s/resource.res", outputdir);
+        
+        bool success = os::copyFile(srcFilepath, dstFilepath);
+        if (!success) {
+            fprintf(stderr, "Failed to copy '%s' to '%s'\n", srcFilepath, dstFilepath);
+            exit(1);
+        }
+        
+        linkerLine.printf("%s ", dstFilepath);
+//#endif
+    }
+    double rcEndTime = os::getTime();
+    double rcTime = rcEndTime - rcStartTime;
+    
     double clStartTime = os::getTime();
     printf("Compiler line: %s\n", compilerLine.toString()); // @Leak
     int result = system(compilerLine.toString()); // @Leak
@@ -448,8 +486,9 @@ void executeMSVCForProject(RscProject *project, RscConfiguration *configuration,
     double linkerEndTime = os::getTime();
     double linkerTime = linkerEndTime - linkerStartTime;
 
-    printf("Total time: %.4f\n", rscTime + clTime + linkerTime);
+    printf("Total time: %.4f\n", rscTime + rcTime + clTime + linkerTime);
     printf("RSC time: %.4f\n", rscTime);
+    printf("Resource-Compiler time: %.4f\n", rcTime);
     printf("MSVC time: %.4f\n", clTime);
     printf("Linker time: %.4f\n", linkerTime);
 }

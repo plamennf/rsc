@@ -340,6 +340,14 @@ static bool parseProject(Tokenizer *tokenizer, RscProject *project) {
             else project->pchsource = toCString(token);
             
             if (!tokenizer->expectToken(&token, TokenType_Semicolon)) return false;
+        } else if (token.equals("resourceFile")) {
+            if (!tokenizer->expectToken(&token, TokenType_Equals)) return false;
+            if (!tokenizer->expectToken(&token, TokenType_String)) return false;
+
+            if (currentConfiguration) currentConfiguration->resourceFile = toCString(token);
+            else project->resourceFile = toCString(token);
+
+            if (!tokenizer->expectToken(&token, TokenType_Semicolon)) return false;
         }
     }
     

@@ -14,5 +14,7 @@ namespace os {
     bool makeDirectoryIfNotExist(char *dir);
 
     double getTime();
+
+    bool copyFile(char *sourceFile, char *destFile);
     
 }

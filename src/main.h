@@ -21,6 +21,8 @@ struct RscConfiguration {
     char *outputdir = NULL;
     char *objdir = NULL;
     char *outputname = NULL;
+
+    char *resourceFile = NULL;
     
     DynamicArray<char *> files;
     DynamicArray<char *> defines;

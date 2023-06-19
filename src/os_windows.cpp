@@ -145,3 +145,14 @@ double os::getTime() {
 
     return (double)perfCounter / (double)perfFreq;
 }
+
+bool os::copyFile(char *sourceFile, char *destFile) {
+    wchar_t wideSourceFilepath[4096];
+    toWindowsFilepath(sourceFile, wideSourceFilepath, ArrayCount(wideSourceFilepath));
+
+    wchar_t wideDestFilepath[4096];
+    toWindowsFilepath(destFile, wideDestFilepath, ArrayCount(wideDestFilepath));
+
+    BOOL result = CopyFileW(wideSourceFilepath, wideDestFilepath, FALSE);
+    return result;
+}
