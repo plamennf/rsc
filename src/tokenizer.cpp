@@ -32,7 +32,7 @@ void Tokenizer::eatWhitespace() {
             at++;
         } else if (isWhitespace(at[0])) {
             at++;
-        } else if (isWhitespace(at[0] == '#')) {
+        } else if (at[0] == '#') {
             at++;
 
             while (at[0] && !isEndOfLine(at[0])) {
