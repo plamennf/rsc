@@ -171,7 +171,7 @@ static bool parseProject(Tokenizer *tokenizer, RscProject *project) {
             if (stringsMatch(identifierToCompare, "configuration")) {
                 for (int i = 0; i < project->configurations.count; i++) {
                     RscConfiguration *cfg = project->configurations[i];
-                    if (stringsMatch(cfg->lowercasedName, secondIdentifierToCompare)) {
+                    if (stringsMatch(cfg->name, secondIdentifierToCompare)) {
                         currentConfiguration = cfg;
                         break;
                     }
