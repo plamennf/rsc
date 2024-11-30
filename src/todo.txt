@@ -1,0 +1,1 @@
+For some reason if outputdir has a slash on the end cl.exe gives D8003 error.
